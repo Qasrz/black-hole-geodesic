@@ -290,8 +290,8 @@ void main() {
 
   float integrationQuality = clamp((float(uSteps) - 10.0) / 490.0, 0.0, 1.0);
 
-  for (int i = 0; i < 960; i++) {
-    if (captured || escaped) {
+  for (int i = 0; i < 500; i++) {
+    if (i >= uSteps || captured || escaped) {
       break;
     }
 
@@ -748,8 +748,8 @@ function bootCanvasFallback(canvas) {
     const zoom = Math.pow(24 / settings.cameraRadius, 0.82);
     const cx = width * (0.52 - settings.panX * 0.22);
     const cy = height * (0.5 + settings.panY * 0.22);
-    const horizon = scale * 0.12 * settings.mass * zoom;
-    const ring = horizon * 1.18;
+    const stepQuality = clamp((settings.steps - 10) / 490, 0, 1);
+    const horizon = scale * (0.092 + 0.026 * stepQuality) * settings.mass * zoom;
 
     const background = ctx.createRadialGradient(cx, cy, 0, cx, cy, scale * 0.9);
     background.addColorStop(0, "#000003");
@@ -770,6 +770,16 @@ function bootCanvasFallback(canvas) {
     }
 
     ctx.globalAlpha = 1;
+
+    const shadow = ctx.createRadialGradient(cx, cy, horizon * 0.7, cx, cy, horizon * 3.25);
+    shadow.addColorStop(0, "rgba(0,0,0,0.92)");
+    shadow.addColorStop(0.34, "rgba(0,0,0,0.48)");
+    shadow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shadow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, horizon * 3.25, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(settings.yaw - 0.22 + Math.sin(simulationTime * 0.16) * 0.08);
@@ -788,30 +798,6 @@ function bootCanvasFallback(canvas) {
     ctx.arc(0, 0, scale * 0.42, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-
-    const lensGlow = ctx.createRadialGradient(cx, cy, ring * 0.75, cx, cy, ring * 1.38);
-    lensGlow.addColorStop(0, "rgba(0, 0, 0, 0)");
-    lensGlow.addColorStop(0.6, "rgba(255, 154, 54, 0.34)");
-    lensGlow.addColorStop(0.78, "rgba(255, 225, 156, 0.18)");
-    lensGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-    ctx.fillStyle = lensGlow;
-    ctx.beginPath();
-    ctx.arc(cx, cy, ring * 1.45, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#000";
-    ctx.beginPath();
-    ctx.arc(cx, cy, horizon, 0, Math.PI * 2);
-    ctx.fill();
-
-    const shadow = ctx.createRadialGradient(cx, cy, horizon, cx, cy, horizon * 4.5);
-    shadow.addColorStop(0, "rgba(0,0,0,1)");
-    shadow.addColorStop(0.38, "rgba(0,0,0,0.72)");
-    shadow.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = shadow;
-    ctx.beginPath();
-    ctx.arc(cx, cy, horizon * 4.5, 0, Math.PI * 2);
-    ctx.fill();
 
     window.requestAnimationFrame(render);
   };
