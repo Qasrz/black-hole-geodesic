@@ -289,16 +289,16 @@ void main() {
   bool escaped = false;
 
   float criticalImpact = sqrt(27.0) * mass;
-  float integrationQuality = clamp((float(uSteps) - 180.0) / 340.0, 0.0, 1.0);
+  float integrationQuality = clamp(log2(max(float(uSteps), 180.0) / 180.0) / 4.8, 0.0, 1.0);
 
-  for (int i = 0; i < 760; i++) {
+  for (int i = 0; i < 960; i++) {
     if (captured || escaped) {
       break;
     }
 
     float radius = radiusFromU(state.x);
-    float adaptive = mix(0.0024, 0.052, smoothstep(2.28 * mass, 54.0 * mass, radius));
-    adaptive *= mix(1.24, 0.72, integrationQuality);
+    float adaptive = mix(0.0025, 0.074, smoothstep(2.28 * mass, 60.0 * mass, radius));
+    adaptive *= mix(1.0, 0.64, integrationQuality);
     adaptive *= mix(0.58, 1.0, smoothstep(0.0, 0.22, sinAlpha));
     vec3 nextState = rk4Step(state, mass, adaptive);
     float nextRadius = radiusFromU(nextState.x);
@@ -380,19 +380,18 @@ void main() {
   float orbitBoost = smoothstep(1.25, 5.4, maxPhi);
   float lensStrength = clamp(photonProximity * orbitBoost * 1.45, 0.0, 1.0);
   vec3 baseSky = backgroundSky(finalDirection);
-  vec3 quietSky = backgroundNebula(finalDirection);
-  vec3 color = mix(baseSky, quietSky, smoothstep(0.18, 0.95, lensStrength) * 0.16);
+  vec3 color = baseSky;
   vec3 photonRing = vec3(1.0, 0.20, 0.035) * photonProximity * orbitBoost * 0.004;
   vec3 starStreaks = lensedStarStreaks(centered, lensStrength) * (1.0 - smoothstep(0.04, 0.34, diskAlpha));
   vec3 diskLayer = diskColor;
   vec3 diskBloom = diskLayer * diskLayer * 0.016;
-  float shadowMask = (captured ? 1.0 : 0.0) * smoothstep(criticalImpact * 1.08, criticalImpact * 0.96, impactParameter);
+  float shadowMask = smoothstep(criticalImpact * 1.025, criticalImpact * 0.975, impactParameter);
   float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
   vec3 shadowColor = vec3(0.0, 0.00016, 0.00042) + vec3(0.20, 0.035, 0.006) * rim * 0.003;
 
-  color = color * (1.0 - 0.06 * lensStrength) + starStreaks + photonRing;
-  color += diskLayer + diskBloom * 0.04;
+  color += starStreaks + photonRing;
   color = mix(color, shadowColor, shadowMask);
+  color += diskLayer + diskBloom * 0.04;
 
   float chroma = 0.002 * photonProximity * orbitBoost;
   color.r += chroma;
@@ -412,7 +411,7 @@ const initialSettings = {
   cameraRadius: 24,
   exposure: 1,
   fov: 1.08,
-  steps: 380,
+  steps: 900,
   diskBrightness: 1.02,
   accretionRate: 0.72,
   alphaViscosity: 0.3,
