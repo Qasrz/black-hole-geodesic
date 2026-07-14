@@ -13,7 +13,16 @@ Live GitHub Pages site:
 - Per-pixel null-geodesic ray integration
 - Schwarzschild event-horizon capture
 - Photon-ring and accretion-disk visualization
+- Mouse-driven orbit, pan, and zoom controls
+- A translucent pop-up control dock that stays out of the scene until opened
 - Responsive, portfolio-ready interaction design
+
+## Controls
+
+- Left-drag: orbit around the black hole
+- Middle-drag: pan the view
+- Scroll wheel: move the camera closer or farther away
+- Controls button: open or close the simulation settings tabs
 
 ## Physics model
 

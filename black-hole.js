@@ -16,12 +16,13 @@ uniform float uInclination;
 uniform float uExposure;
 uniform float uFov;
 uniform float uDiskBrightness;
+uniform float uCameraRadius;
+uniform float uYaw;
+uniform vec2 uPan;
 uniform int uSteps;
 
 const float PI = 3.141592653589793;
 const float TAU = 6.283185307179586;
-const float CAMERA_RADIUS = 24.0;
-const float ESCAPE_RADIUS = 72.0;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -139,10 +140,13 @@ vec3 diskEmission(vec3 hitPosition, vec3 rayStep, float mass) {
 
 void main() {
   vec2 centered = (gl_FragCoord.xy * 2.0 - uResolution.xy) / min(uResolution.x, uResolution.y);
+  centered += uPan;
   float vignette = smoothstep(1.65, 0.28, length(centered));
 
   float mass = uMass;
-  float cameraYaw = 0.18 * sin(uTime * 0.08);
+  float cameraRadius = max(uCameraRadius, 2.8 * mass + 0.35);
+  float escapeRadius = max(64.0, cameraRadius * 3.2);
+  float cameraYaw = uYaw + 0.035 * sin(uTime * 0.08);
   float inclination = radians(uInclination);
   vec3 eRadial = normalize(vec3(sin(cameraYaw) * cos(inclination), sin(inclination), cos(cameraYaw) * cos(inclination)));
   vec3 forward = -eRadial;
@@ -156,14 +160,14 @@ void main() {
   float sinAlpha = length(transverse);
   vec3 eTangent = sinAlpha > 0.0001 ? normalize(transverse) : right;
 
-  float lapse = sqrt(max(0.001, 1.0 - 2.0 * mass / CAMERA_RADIUS));
-  float angularMomentum = CAMERA_RADIUS * sinAlpha / lapse;
-  vec3 state = vec3(CAMERA_RADIUS, -cosAlpha, 0.0);
+  float lapse = sqrt(max(0.001, 1.0 - 2.0 * mass / cameraRadius));
+  float angularMomentum = cameraRadius * sinAlpha / lapse;
+  vec3 state = vec3(cameraRadius, -cosAlpha, 0.0);
 
   vec3 previousPosition = positionFromPlane(state.x, state.z, eRadial, eTangent);
   vec3 diskColor = vec3(0.0);
   float diskAlpha = 0.0;
-  float minRadius = CAMERA_RADIUS;
+  float minRadius = cameraRadius;
   float maxPhi = 0.0;
   bool captured = false;
   bool escaped = false;
@@ -198,7 +202,7 @@ void main() {
     if (state.x <= 2.012 * mass) {
       captured = true;
     }
-    if (state.x > ESCAPE_RADIUS && state.y > 0.0) {
+    if (state.x > escapeRadius && state.y > 0.0) {
       escaped = true;
     }
   }
@@ -234,15 +238,46 @@ void main() {
 const initialSettings = {
   mass: 1,
   inclination: 38,
+  cameraRadius: 24,
   exposure: 1.05,
   fov: 1.08,
   steps: 360,
   diskBrightness: 1,
   timeScale: 0.75,
+  yaw: 0,
+  panX: 0,
+  panY: 0,
   paused: false,
 };
 
 const settings = { ...initialSettings };
+const controlInputs = new Map();
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function updateControlOutput(input) {
+  const value = Number(input.value);
+  const precision = Number(input.dataset.precision || "2");
+  const unit = input.dataset.unit || "";
+  const output = document.querySelector(`#${input.dataset.value}`);
+
+  if (output) {
+    output.textContent = `${value.toFixed(precision)}${unit}`;
+  }
+}
+
+function syncControl(key) {
+  const input = controlInputs.get(key);
+
+  if (!input) {
+    return;
+  }
+
+  input.value = String(settings[key]);
+  updateControlOutput(input);
+}
 
 function compileShader(gl, type, source) {
   const shader = gl.createShader(type);
@@ -326,22 +361,50 @@ function bindTabs() {
   });
 }
 
+function bindUiToggle() {
+  const toggle = document.querySelector("#ui-toggle");
+  const dock = document.querySelector("#tab-dock");
+
+  if (!toggle || !dock) {
+    return;
+  }
+
+  const label = toggle.querySelector(".ui-toggle__label");
+
+  const setOpen = (open) => {
+    dock.classList.toggle("is-open", open);
+    dock.setAttribute("aria-hidden", String(!open));
+    toggle.classList.toggle("is-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+
+    if (label) {
+      label.textContent = open ? "Close controls" : "Controls";
+    }
+  };
+
+  setOpen(false);
+  toggle.addEventListener("click", () => {
+    setOpen(!dock.classList.contains("is-open"));
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setOpen(false);
+    }
+  });
+}
+
 function bindControls() {
   document.querySelectorAll("[data-control]").forEach((input) => {
     const updateValue = () => {
       const key = input.dataset.control;
       const value = Number(input.value);
-      const precision = Number(input.dataset.precision || "2");
-      const unit = input.dataset.unit || "";
-      const output = document.querySelector(`#${input.dataset.value}`);
 
       settings[key] = value;
-
-      if (output) {
-        output.textContent = `${value.toFixed(precision)}${unit}`;
-      }
+      updateControlOutput(input);
     };
 
+    controlInputs.set(input.dataset.control, input);
     input.addEventListener("input", updateValue);
     updateValue();
   });
@@ -354,6 +417,9 @@ function bindControls() {
       input.dispatchEvent(new Event("input"));
     });
 
+    settings.yaw = initialSettings.yaw;
+    settings.panX = initialSettings.panX;
+    settings.panY = initialSettings.panY;
     settings.paused = false;
     document.querySelector("#pause-button").textContent = "Pause motion";
   });
@@ -363,6 +429,101 @@ function bindControls() {
     event.currentTarget.textContent = settings.paused
       ? "Resume motion"
       : "Pause motion";
+  });
+}
+
+function bindPointerControls(canvas) {
+  if (!canvas) {
+    return;
+  }
+
+  const experience = document.querySelector(".experience");
+  const drag = {
+    mode: null,
+    pointerId: null,
+    x: 0,
+    y: 0,
+    yaw: 0,
+    inclination: 0,
+    panX: 0,
+    panY: 0,
+  };
+
+  const endDrag = (event) => {
+    if (drag.pointerId !== null && event?.pointerId === drag.pointerId) {
+      try {
+        if (!canvas.hasPointerCapture || canvas.hasPointerCapture(drag.pointerId)) {
+          canvas.releasePointerCapture?.(drag.pointerId);
+        }
+      } catch (error) {
+        console.warn("Pointer capture release skipped.", error);
+      }
+    }
+
+    drag.mode = null;
+    drag.pointerId = null;
+    experience?.classList.remove("is-dragging");
+  };
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 && event.button !== 1) {
+      return;
+    }
+
+    event.preventDefault();
+    canvas.setPointerCapture?.(event.pointerId);
+
+    drag.mode = event.button === 1 ? "pan" : "orbit";
+    drag.pointerId = event.pointerId;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    drag.yaw = settings.yaw;
+    drag.inclination = settings.inclination;
+    drag.panX = settings.panX;
+    drag.panY = settings.panY;
+    experience?.classList.add("is-dragging");
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (drag.pointerId !== event.pointerId || drag.mode === null) {
+      return;
+    }
+
+    event.preventDefault();
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+
+    if (drag.mode === "orbit") {
+      settings.yaw = drag.yaw + dx * 0.006;
+      settings.inclination = clamp(drag.inclination - dy * 0.12, 5, 84);
+      syncControl("inclination");
+      return;
+    }
+
+    const panScale = 2.35 / Math.max(320, Math.min(window.innerWidth, window.innerHeight));
+    settings.panX = clamp(drag.panX - dx * panScale, -1.85, 1.85);
+    settings.panY = clamp(drag.panY + dy * panScale, -1.45, 1.45);
+  });
+
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("lostpointercapture", endDrag);
+
+  canvas.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      const zoomStep = event.deltaY * 0.018;
+      settings.cameraRadius = clamp(settings.cameraRadius + zoomStep, 8.5, 54);
+      syncControl("cameraRadius");
+    },
+    { passive: false },
+  );
+
+  canvas.addEventListener("auxclick", (event) => {
+    if (event.button === 1) {
+      event.preventDefault();
+    }
   });
 }
 
@@ -417,10 +578,11 @@ function bootCanvasFallback(canvas) {
 
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const cx = width * 0.52;
-    const cy = height * 0.5;
     const scale = Math.min(width, height);
-    const horizon = scale * 0.12 * settings.mass;
+    const zoom = Math.pow(24 / settings.cameraRadius, 0.82);
+    const cx = width * (0.52 - settings.panX * 0.22);
+    const cy = height * (0.5 + settings.panY * 0.22);
+    const horizon = scale * 0.12 * settings.mass * zoom;
     const ring = horizon * 1.18;
 
     const background = ctx.createRadialGradient(cx, cy, 0, cx, cy, scale * 0.9);
@@ -444,7 +606,7 @@ function bootCanvasFallback(canvas) {
     ctx.globalAlpha = 1;
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(-0.22 + Math.sin(simulationTime * 0.16) * 0.08);
+    ctx.rotate(settings.yaw - 0.22 + Math.sin(simulationTime * 0.16) * 0.08);
     ctx.scale(1.55, 0.35 + settings.inclination / 220);
 
     const diskGradient = ctx.createRadialGradient(0, 0, horizon * 0.8, 0, 0, scale * 0.42);
@@ -515,7 +677,7 @@ function bootSimulation() {
     program = createProgram(gl);
   } catch (error) {
     console.error(error);
-    showFallback("Shader fallback active");
+    bootCanvasFallback(canvas);
     return;
   }
 
@@ -539,6 +701,9 @@ function bootSimulation() {
     inclination: gl.getUniformLocation(program, "uInclination"),
     exposure: gl.getUniformLocation(program, "uExposure"),
     fov: gl.getUniformLocation(program, "uFov"),
+    cameraRadius: gl.getUniformLocation(program, "uCameraRadius"),
+    yaw: gl.getUniformLocation(program, "uYaw"),
+    pan: gl.getUniformLocation(program, "uPan"),
     steps: gl.getUniformLocation(program, "uSteps"),
     diskBrightness: gl.getUniformLocation(program, "uDiskBrightness"),
   };
@@ -582,6 +747,9 @@ function bootSimulation() {
     gl.uniform1f(uniforms.inclination, settings.inclination);
     gl.uniform1f(uniforms.exposure, settings.exposure);
     gl.uniform1f(uniforms.fov, settings.fov);
+    gl.uniform1f(uniforms.cameraRadius, settings.cameraRadius);
+    gl.uniform1f(uniforms.yaw, settings.yaw);
+    gl.uniform2f(uniforms.pan, settings.panX, settings.panY);
     gl.uniform1f(uniforms.diskBrightness, settings.diskBrightness);
     gl.uniform1i(uniforms.steps, settings.steps);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -595,6 +763,8 @@ function bootSimulation() {
 
 document.addEventListener("DOMContentLoaded", () => {
   bindTabs();
+  bindUiToggle();
   bindControls();
+  bindPointerControls(document.querySelector("#black-hole-canvas"));
   bootSimulation();
 });

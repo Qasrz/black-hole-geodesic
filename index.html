@@ -42,7 +42,23 @@
         <h1>Light bent by spacetime.</h1>
       </section>
 
-      <section class="tab-dock" aria-label="Simulation tools">
+      <button
+        id="ui-toggle"
+        class="ui-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="tab-dock"
+      >
+        <span class="ui-toggle__dot" aria-hidden="true"></span>
+        <span class="ui-toggle__label">Controls</span>
+      </button>
+
+      <section
+        id="tab-dock"
+        class="tab-dock"
+        aria-label="Simulation tools"
+        aria-hidden="true"
+      >
         <nav class="tab-list" role="tablist" aria-label="Black-hole panels">
           <button
             class="tab-button is-active"
@@ -87,6 +103,10 @@
             aria-labelledby="controls-tab"
             data-panel="controls"
           >
+            <p class="gesture-help">
+              Left-drag to orbit. Middle-drag to pan. Scroll to move closer.
+            </p>
+
             <div class="control-grid">
               <label class="control">
                 <span>Mass <strong id="mass-value">1.00 M</strong></span>
@@ -117,6 +137,23 @@
                   max="72"
                   step="1"
                   value="38"
+                />
+              </label>
+
+              <label class="control">
+                <span>
+                  Distance <strong id="cameraRadius-value">24.0 r</strong>
+                </span>
+                <input
+                  data-control="cameraRadius"
+                  data-value="cameraRadius-value"
+                  data-unit=" r"
+                  data-precision="1"
+                  type="range"
+                  min="8.5"
+                  max="54"
+                  step="0.5"
+                  value="24"
                 />
               </label>
 
