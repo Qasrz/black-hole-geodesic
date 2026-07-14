@@ -142,24 +142,6 @@ vec3 backgroundSky(vec3 d) {
   return backgroundNebula(d) + starColor * stars * 1.35;
 }
 
-vec3 tangentialSmearedSky(vec3 d, vec2 p, vec3 right, vec3 up, float strength) {
-  float r = length(p);
-  vec2 tangent2 = r > 0.001 ? normalize(vec2(-p.y, p.x)) : vec2(1.0, 0.0);
-  vec3 smearAxis = normalize(right * tangent2.x + up * tangent2.y);
-  float lensBand = smoothstep(0.16, 0.42, r) * (1.0 - smoothstep(1.05, 1.82, r));
-  float span = (0.010 + 0.090 * strength) * lensBand;
-
-  vec3 sum = backgroundSky(d) * 0.12;
-  sum += backgroundSky(normalize(d + smearAxis * span * -1.00)) * 0.17;
-  sum += backgroundSky(normalize(d + smearAxis * span * -0.62)) * 0.20;
-  sum += backgroundSky(normalize(d + smearAxis * span * -0.26)) * 0.24;
-  sum += backgroundSky(normalize(d + smearAxis * span * 0.26)) * 0.24;
-  sum += backgroundSky(normalize(d + smearAxis * span * 0.62)) * 0.20;
-  sum += backgroundSky(normalize(d + smearAxis * span * 1.00)) * 0.17;
-
-  return sum / 1.34 * (1.0 + 0.18 * strength * lensBand);
-}
-
 vec3 geodesicDerivative(vec3 state, float mass) {
   float u = max(state.x, 0.0);
   return vec3(state.y, 3.0 * mass * u * u - u, 1.0);
@@ -277,7 +259,7 @@ void main() {
 
   float mass = uMass;
   float cameraRadius = max(uCameraRadius, 2.8 * mass + 0.35);
-  float escapeRadius = max(64.0, cameraRadius * 3.2);
+  float escapeRadius = max(52.0, cameraRadius * 2.2);
   float cameraYaw = uYaw + 0.035 * sin(uTime * 0.08);
   float inclination = radians(uInclination);
   vec3 eRadial = normalize(vec3(sin(cameraYaw) * cos(inclination), sin(inclination), cos(cameraYaw) * cos(inclination)));
@@ -307,14 +289,16 @@ void main() {
   bool escaped = false;
 
   float criticalImpact = sqrt(27.0) * mass;
+  float integrationQuality = clamp((float(uSteps) - 180.0) / 340.0, 0.0, 1.0);
 
-  for (int i = 0; i < 520; i++) {
-    if (i >= uSteps || captured || escaped) {
+  for (int i = 0; i < 760; i++) {
+    if (captured || escaped) {
       break;
     }
 
     float radius = radiusFromU(state.x);
-    float adaptive = mix(0.0024, 0.023, smoothstep(2.28 * mass, 48.0 * mass, radius));
+    float adaptive = mix(0.0024, 0.052, smoothstep(2.28 * mass, 54.0 * mass, radius));
+    adaptive *= mix(1.24, 0.72, integrationQuality);
     adaptive *= mix(0.58, 1.0, smoothstep(0.0, 0.22, sinAlpha));
     vec3 nextState = rk4Step(state, mass, adaptive);
     float nextRadius = radiusFromU(nextState.x);
@@ -385,7 +369,11 @@ void main() {
     }
   }
 
-  vec3 finalDirection = normalize(cos(state.z) * eRadial + sin(state.z) * eTangent);
+  float phiInfinity = state.z;
+  if (!captured && state.y < -0.000001) {
+    phiInfinity += atan(clamp(state.x / max(-state.y, 0.000001), 0.0, PI));
+  }
+  vec3 finalDirection = normalize(cos(phiInfinity) * eRadial + sin(phiInfinity) * eTangent);
 
   float photonSphere = 3.0 * mass;
   float photonProximity = exp(-abs(minRadius - photonSphere) / (0.18 * mass));
@@ -393,19 +381,18 @@ void main() {
   float lensStrength = clamp(photonProximity * orbitBoost * 1.45, 0.0, 1.0);
   vec3 baseSky = backgroundSky(finalDirection);
   vec3 quietSky = backgroundNebula(finalDirection);
-  vec3 color = mix(baseSky, quietSky, smoothstep(0.18, 0.95, lensStrength) * 0.74);
+  vec3 color = mix(baseSky, quietSky, smoothstep(0.18, 0.95, lensStrength) * 0.16);
   vec3 photonRing = vec3(1.0, 0.20, 0.035) * photonProximity * orbitBoost * 0.004;
   vec3 starStreaks = lensedStarStreaks(centered, lensStrength) * (1.0 - smoothstep(0.04, 0.34, diskAlpha));
   vec3 diskLayer = diskColor;
   vec3 diskBloom = diskLayer * diskLayer * 0.016;
-  float diskOpacity = clamp(diskAlpha * 0.42, 0.0, 0.34);
   float shadowMask = (captured ? 1.0 : 0.0) * smoothstep(criticalImpact * 1.08, criticalImpact * 0.96, impactParameter);
   float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
   vec3 shadowColor = vec3(0.0, 0.00016, 0.00042) + vec3(0.20, 0.035, 0.006) * rim * 0.003;
 
-  color = color * (1.0 - 0.26 * lensStrength) + starStreaks + photonRing * (1.0 - diskOpacity);
+  color = color * (1.0 - 0.06 * lensStrength) + starStreaks + photonRing;
+  color += diskLayer + diskBloom * 0.04;
   color = mix(color, shadowColor, shadowMask);
-  color = color * (1.0 - diskOpacity) + diskLayer + diskBloom * 0.04;
 
   float chroma = 0.002 * photonProximity * orbitBoost;
   color.r += chroma;
