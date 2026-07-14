@@ -288,8 +288,7 @@ void main() {
   bool captured = false;
   bool escaped = false;
 
-  float criticalImpact = sqrt(27.0) * mass;
-  float integrationQuality = clamp(log2(max(float(uSteps), 180.0) / 180.0) / 4.8, 0.0, 1.0);
+  float integrationQuality = clamp((float(uSteps) - 10.0) / 490.0, 0.0, 1.0);
 
   for (int i = 0; i < 960; i++) {
     if (captured || escaped) {
@@ -381,21 +380,16 @@ void main() {
   float lensStrength = clamp(photonProximity * orbitBoost * 1.45, 0.0, 1.0);
   vec3 baseSky = backgroundSky(finalDirection);
   vec3 color = baseSky;
-  vec3 photonRing = vec3(1.0, 0.20, 0.035) * photonProximity * orbitBoost * 0.004;
   vec3 starStreaks = lensedStarStreaks(centered, lensStrength) * (1.0 - smoothstep(0.04, 0.34, diskAlpha));
   vec3 diskLayer = diskColor;
-  vec3 diskBloom = diskLayer * diskLayer * 0.016;
-  float shadowMask = smoothstep(criticalImpact * 1.025, criticalImpact * 0.975, impactParameter);
-  float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
-  vec3 shadowColor = vec3(0.0, 0.00016, 0.00042) + vec3(0.20, 0.035, 0.006) * rim * 0.003;
+  vec3 diskBloom = diskLayer * diskLayer * 0.012;
+  float shadowMask = captured ? 1.0 : 0.0;
+  vec3 shadowColor = vec3(0.0, 0.00012, 0.00034);
 
-  color += starStreaks + photonRing;
+  color += starStreaks;
   color = mix(color, shadowColor, shadowMask);
   color += diskLayer + diskBloom * 0.04;
 
-  float chroma = 0.002 * photonProximity * orbitBoost;
-  color.r += chroma;
-  color.b += chroma * 0.22;
   color *= uExposure;
   color = vec3(1.0) - exp(-color);
   color = pow(color, vec3(0.92));
@@ -411,7 +405,7 @@ const initialSettings = {
   cameraRadius: 24,
   exposure: 1,
   fov: 1.08,
-  steps: 900,
+  steps: 120,
   diskBrightness: 1.02,
   accretionRate: 0.72,
   alphaViscosity: 0.3,
