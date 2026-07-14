@@ -1,10 +1,10 @@
 # Black Hole Geodesic
 
-An interactive personal-portfolio demo that renders light bending around a black
-hole with Schwarzschild null-geodesic ray tracing.
+An interactive personal-site demo that renders light bending around a black hole
+with Schwarzschild null-geodesic ray tracing.
 
-Live site:
-[black-hole-geodesic-lab.q-b-oneil.chatgpt.site](https://black-hole-geodesic-lab.q-b-oneil.chatgpt.site)
+Live GitHub Pages site:
+[qasrz.github.io/black-hole-geodesic](https://qasrz.github.io/black-hole-geodesic/)
 
 ## What it demonstrates
 
@@ -27,19 +27,7 @@ integrates the radial null-geodesic equation:
 The implementation uses an RK4 stepper in the shader and treats rays as captured
 when they cross the event horizon at `r = 2M`.
 
-## Future upgrades
+## Running locally
 
-- Kerr geodesics for spin and frame dragging
-- Better accretion-disk radiative transfer
-- A write-up section explaining the derivation
-- Portfolio homepage sections around projects, resume, and contact
-
-## Local development
-
-```bash
-npm install
-npm run dev
-npm run build
-```
-
-Requires Node.js `>=22.13.0`.
+No build step is required. Open `index.html` in a browser, or serve the folder
+with any static-file server.

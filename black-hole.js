@@ -1,35 +1,7 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
-
-type SimulationSettings = {
-  mass: number;
-  inclination: number;
-  exposure: number;
-  fov: number;
-  steps: number;
-  diskBrightness: number;
-  timeScale: number;
-  paused: boolean;
-};
-
-const initialSettings: SimulationSettings = {
-  mass: 1,
-  inclination: 38,
-  exposure: 1.05,
-  fov: 1.08,
-  steps: 360,
-  diskBrightness: 1,
-  timeScale: 0.75,
-  paused: false,
-};
-
 const vertexShaderSource = `#version 300 es
 in vec2 aPosition;
-out vec2 vUv;
 
 void main() {
-  vUv = aPosition * 0.5 + 0.5;
   gl_Position = vec4(aPosition, 0.0, 1.0);
 }
 `;
@@ -37,7 +9,6 @@ void main() {
 const fragmentShaderSource = `#version 300 es
 precision highp float;
 
-in vec2 vUv;
 out vec4 fragColor;
 
 uniform vec2 uResolution;
@@ -262,11 +233,20 @@ void main() {
 }
 `;
 
-function compileShader(
-  gl: WebGL2RenderingContext,
-  type: number,
-  source: string,
-) {
+const initialSettings = {
+  mass: 1,
+  inclination: 38,
+  exposure: 1.05,
+  fov: 1.08,
+  steps: 360,
+  diskBrightness: 1,
+  timeScale: 0.75,
+  paused: false,
+};
+
+const settings = { ...initialSettings };
+
+function compileShader(gl, type, source) {
   const shader = gl.createShader(type);
 
   if (!shader) {
@@ -277,7 +257,7 @@ function compileShader(
   gl.compileShader(shader);
 
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const log = gl.getShaderInfoLog(shader) ?? "Unknown shader compile error.";
+    const log = gl.getShaderInfoLog(shader) || "Unknown shader compile error.";
     gl.deleteShader(shader);
     throw new Error(log);
   }
@@ -285,7 +265,7 @@ function compileShader(
   return shader;
 }
 
-function createProgram(gl: WebGL2RenderingContext) {
+function createProgram(gl) {
   const vertex = compileShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
   const fragment = compileShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
   const program = gl.createProgram();
@@ -297,12 +277,11 @@ function createProgram(gl: WebGL2RenderingContext) {
   gl.attachShader(program, vertex);
   gl.attachShader(program, fragment);
   gl.linkProgram(program);
-
   gl.deleteShader(vertex);
   gl.deleteShader(fragment);
 
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const log = gl.getProgramInfoLog(program) ?? "Unknown WebGL link error.";
+    const log = gl.getProgramInfoLog(program) || "Unknown WebGL link error.";
     gl.deleteProgram(program);
     throw new Error(log);
   }
@@ -310,292 +289,158 @@ function createProgram(gl: WebGL2RenderingContext) {
   return program;
 }
 
-function SimulationSlider({
-  label,
-  value,
-  min,
-  max,
-  step,
-  unit,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  unit?: string;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="control">
-      <span>
-        {label}
-        <strong>
-          {value.toFixed(step < 1 ? 2 : 0)}
-          {unit}
-        </strong>
-      </span>
-      <input
-        aria-label={label}
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
-    </label>
-  );
+function updateStatus(state, message) {
+  const dot = document.querySelector("#status-dot");
+  const label = document.querySelector("#status-label");
+
+  dot.className = `status-dot status-dot--${state}`;
+  label.textContent = message;
 }
 
-export function BlackHoleSimulation() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number | null>(null);
-  const settingsRef = useRef(initialSettings);
-  const [settings, setSettings] = useState<SimulationSettings>(initialSettings);
-  const [status, setStatus] = useState<"booting" | "running" | "fallback">(
-    "booting",
-  );
+function showFallback(message) {
+  const fallback = document.querySelector("#fallback-message");
+  fallback.hidden = false;
+  updateStatus("fallback", message);
+}
 
-  useEffect(() => {
-    settingsRef.current = settings;
-  }, [settings]);
+function bindControls() {
+  document.querySelectorAll("[data-control]").forEach((input) => {
+    const updateValue = () => {
+      const key = input.dataset.control;
+      const value = Number(input.value);
+      const precision = Number(input.dataset.precision || "2");
+      const unit = input.dataset.unit || "";
+      const output = document.querySelector(`#${input.dataset.value}`);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
+      settings[key] = value;
 
-    if (!canvas) {
-      return;
-    }
+      if (output) {
+        output.textContent = `${value.toFixed(precision)}${unit}`;
+      }
+    };
 
-    const gl = canvas.getContext("webgl2", {
-      alpha: false,
-      antialias: false,
-      powerPreference: "high-performance",
+    input.addEventListener("input", updateValue);
+    updateValue();
+  });
+
+  document.querySelector("#reset-button").addEventListener("click", () => {
+    Object.assign(settings, initialSettings);
+
+    document.querySelectorAll("[data-control]").forEach((input) => {
+      input.value = String(settings[input.dataset.control]);
+      input.dispatchEvent(new Event("input"));
     });
 
-    if (!gl) {
-      setStatus("fallback");
-      return;
-    }
+    settings.paused = false;
+    document.querySelector("#pause-button").textContent = "Pause motion";
+  });
 
-    let program: WebGLProgram;
+  document.querySelector("#pause-button").addEventListener("click", (event) => {
+    settings.paused = !settings.paused;
+    event.currentTarget.textContent = settings.paused
+      ? "Resume motion"
+      : "Pause motion";
+  });
+}
 
-    try {
-      program = createProgram(gl);
-    } catch (error) {
-      console.error(error);
-      setStatus("fallback");
-      return;
-    }
+function bootSimulation() {
+  const canvas = document.querySelector("#black-hole-canvas");
+  const gl = canvas.getContext("webgl2", {
+    alpha: false,
+    antialias: false,
+    powerPreference: "high-performance",
+  });
 
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-      gl.STATIC_DRAW,
-    );
+  if (!gl) {
+    showFallback("WebGL2 unavailable");
+    return;
+  }
 
-    const position = gl.getAttribLocation(program, "aPosition");
-    gl.enableVertexAttribArray(position);
-    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-    gl.useProgram(program);
+  let program;
 
-    const uniforms = {
-      resolution: gl.getUniformLocation(program, "uResolution"),
-      time: gl.getUniformLocation(program, "uTime"),
-      mass: gl.getUniformLocation(program, "uMass"),
-      inclination: gl.getUniformLocation(program, "uInclination"),
-      exposure: gl.getUniformLocation(program, "uExposure"),
-      fov: gl.getUniformLocation(program, "uFov"),
-      steps: gl.getUniformLocation(program, "uSteps"),
-      diskBrightness: gl.getUniformLocation(program, "uDiskBrightness"),
-    };
+  try {
+    program = createProgram(gl);
+  } catch (error) {
+    console.error(error);
+    showFallback("Shader compile failed");
+    return;
+  }
 
-    const resize = () => {
-      const bounds = canvas.getBoundingClientRect();
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.65);
-      const width = Math.max(320, Math.floor(bounds.width * pixelRatio));
-      const height = Math.max(260, Math.floor(bounds.height * pixelRatio));
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(
+    gl.ARRAY_BUFFER,
+    new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+    gl.STATIC_DRAW,
+  );
 
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-        gl.viewport(0, 0, width, height);
-      }
-    };
+  const position = gl.getAttribLocation(program, "aPosition");
+  gl.enableVertexAttribArray(position);
+  gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+  gl.useProgram(program);
 
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
-    resize();
-
-    const render = (timestamp: number) => {
-      const current = settingsRef.current;
-
-      if (startTimeRef.current === null) {
-        startTimeRef.current = timestamp;
-      }
-
-      const elapsed = current.paused
-        ? 0
-        : ((timestamp - startTimeRef.current) / 1000) * current.timeScale;
-
-      resize();
-      gl.useProgram(program);
-      gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
-      gl.uniform1f(uniforms.time, elapsed);
-      gl.uniform1f(uniforms.mass, current.mass);
-      gl.uniform1f(uniforms.inclination, current.inclination);
-      gl.uniform1f(uniforms.exposure, current.exposure);
-      gl.uniform1f(uniforms.fov, current.fov);
-      gl.uniform1f(uniforms.diskBrightness, current.diskBrightness);
-      gl.uniform1i(uniforms.steps, current.steps);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-      setStatus((previous) => (previous === "running" ? previous : "running"));
-      animationRef.current = requestAnimationFrame(render);
-    };
-
-    animationRef.current = requestAnimationFrame(render);
-
-    return () => {
-      observer.disconnect();
-
-      if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
-      }
-
-      gl.deleteBuffer(buffer);
-      gl.deleteProgram(program);
-    };
-  }, []);
-
-  const updateSetting = <Key extends keyof SimulationSettings>(
-    key: Key,
-    value: SimulationSettings[Key],
-  ) => {
-    setSettings((current) => ({ ...current, [key]: value }));
+  const uniforms = {
+    resolution: gl.getUniformLocation(program, "uResolution"),
+    time: gl.getUniformLocation(program, "uTime"),
+    mass: gl.getUniformLocation(program, "uMass"),
+    inclination: gl.getUniformLocation(program, "uInclination"),
+    exposure: gl.getUniformLocation(program, "uExposure"),
+    fov: gl.getUniformLocation(program, "uFov"),
+    steps: gl.getUniformLocation(program, "uSteps"),
+    diskBrightness: gl.getUniformLocation(program, "uDiskBrightness"),
   };
 
-  const reset = () => setSettings(initialSettings);
+  const resize = () => {
+    const bounds = canvas.getBoundingClientRect();
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.65);
+    const width = Math.max(320, Math.floor(bounds.width * pixelRatio));
+    const height = Math.max(260, Math.floor(bounds.height * pixelRatio));
 
-  return (
-    <section className="simulation-panel" aria-label="Black hole simulation">
-      <div className="viewport-card">
-        <div className="viewport-toolbar">
-          <div>
-            <span className={`status-dot status-dot--${status}`} />
-            <span>
-              {status === "running"
-                ? "Tracing null geodesics"
-                : status === "fallback"
-                  ? "WebGL2 unavailable"
-                  : "Compiling shader kernel"}
-            </span>
-          </div>
-          <code>Schwarzschild · RK4 · λ-step adaptive</code>
-        </div>
-        <div className="canvas-wrap">
-          <canvas ref={canvasRef} aria-label="Rendered black hole simulation" />
-          {status === "fallback" ? (
-            <div className="fallback-message">
-              <strong>WebGL2 is required for the live simulation.</strong>
-              <span>
-                The physics kernel is still included in the project; try a
-                browser or device with WebGL2 enabled.
-              </span>
-            </div>
-          ) : null}
-        </div>
-      </div>
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+      gl.viewport(0, 0, width, height);
+    }
+  };
 
-      <aside className="control-panel">
-        <div className="control-panel__header">
-          <p>Controls</p>
-          <button type="button" onClick={reset}>
-            Reset
-          </button>
-        </div>
+  new ResizeObserver(resize).observe(canvas);
+  resize();
 
-        <SimulationSlider
-          label="Mass scale"
-          min={0.72}
-          max={1.7}
-          step={0.01}
-          value={settings.mass}
-          onChange={(value) => updateSetting("mass", value)}
-          unit=" M"
-        />
-        <SimulationSlider
-          label="Camera inclination"
-          min={8}
-          max={72}
-          step={1}
-          value={settings.inclination}
-          onChange={(value) => updateSetting("inclination", value)}
-          unit="°"
-        />
-        <SimulationSlider
-          label="Field of view"
-          min={0.82}
-          max={1.44}
-          step={0.01}
-          value={settings.fov}
-          onChange={(value) => updateSetting("fov", value)}
-        />
-        <SimulationSlider
-          label="Exposure"
-          min={0.55}
-          max={1.85}
-          step={0.01}
-          value={settings.exposure}
-          onChange={(value) => updateSetting("exposure", value)}
-        />
-        <SimulationSlider
-          label="Disk brightness"
-          min={0.2}
-          max={1.75}
-          step={0.01}
-          value={settings.diskBrightness}
-          onChange={(value) => updateSetting("diskBrightness", value)}
-        />
-        <SimulationSlider
-          label="Integration steps"
-          min={180}
-          max={520}
-          step={10}
-          value={settings.steps}
-          onChange={(value) => updateSetting("steps", value)}
-        />
-        <SimulationSlider
-          label="Animation speed"
-          min={0}
-          max={1.6}
-          step={0.01}
-          value={settings.timeScale}
-          onChange={(value) => updateSetting("timeScale", value)}
-        />
+  let lastTimestamp = null;
+  let simulationTime = 0;
 
-        <button
-          className="pause-button"
-          type="button"
-          onClick={() => updateSetting("paused", !settings.paused)}
-        >
-          {settings.paused ? "Resume motion" : "Pause motion"}
-        </button>
+  const render = (timestamp) => {
+    if (lastTimestamp === null) {
+      lastTimestamp = timestamp;
+    }
 
-        <div className="equation-card">
-          <span>Kernel equation</span>
-          <code>(dr/dλ)² = E² − (1 − 2M/r)L²/r²</code>
-          <p>
-            The shader integrates the equivalent second-order form per pixel and
-            marks a ray captured when r crosses 2M.
-          </p>
-        </div>
-      </aside>
-    </section>
-  );
+    const delta = Math.min(80, timestamp - lastTimestamp);
+    lastTimestamp = timestamp;
+
+    if (!settings.paused) {
+      simulationTime += (delta / 1000) * settings.timeScale;
+    }
+
+    resize();
+    gl.useProgram(program);
+    gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
+    gl.uniform1f(uniforms.time, simulationTime);
+    gl.uniform1f(uniforms.mass, settings.mass);
+    gl.uniform1f(uniforms.inclination, settings.inclination);
+    gl.uniform1f(uniforms.exposure, settings.exposure);
+    gl.uniform1f(uniforms.fov, settings.fov);
+    gl.uniform1f(uniforms.diskBrightness, settings.diskBrightness);
+    gl.uniform1i(uniforms.steps, settings.steps);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    updateStatus("running", "Tracing null geodesics");
+    window.requestAnimationFrame(render);
+  };
+
+  window.requestAnimationFrame(render);
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  bindControls();
+  bootSimulation();
+});
