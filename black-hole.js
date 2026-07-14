@@ -166,7 +166,7 @@ vec3 diskEmission(vec3 hitPosition, vec3 rayStep, float mass) {
   float opticalDepth = 1.0 - exp(-clamp(surfaceDensity * 0.072, 0.0, 9.0));
 
   float flux = thinDiskFlux(diskRadius, isco, mass, accretionRate);
-  float normalizedFlux = flux * 48000.0;
+  float normalizedFlux = flux * 145000.0;
   float heat = clamp(pow(max(normalizedFlux, 0.0), 0.25) * observedShift, 0.0, 1.0);
 
   float orbitalPhase = angle - omega * uTime * 34.0;
@@ -180,7 +180,8 @@ vec3 diskEmission(vec3 hitPosition, vec3 rayStep, float mass) {
   float turbulence = clamp(densityPerturbation * shearTexture, 0.68, 1.34);
   float beaming = pow(observedShift, 3.35);
   float limbSoftening = mix(0.72, 1.0, smoothstep(0.05, 0.42, abs(toObserver.y)));
-  float brightness = radialMask * normalizedFlux * beaming * turbulence * limbSoftening * opticalDepth;
+  float blazeBoost = mix(1.55, 2.85, smoothstep(0.35, 1.6, accretionRate));
+  float brightness = radialMask * normalizedFlux * beaming * turbulence * limbSoftening * opticalDepth * blazeBoost;
 
   vec3 color = diskBlackbodyColor(heat);
   return color * brightness * uDiskBrightness;
@@ -241,7 +242,7 @@ void main() {
       float diskRadius = length(hit.xz);
       if (diskRadius > 5.98 * mass && diskRadius < 34.4 * mass) {
         vec3 emission = diskEmission(hit, rayStep, mass);
-        float alpha = clamp(length(emission) * 0.105, 0.0, 0.58);
+        float alpha = clamp(length(emission) * 0.24, 0.0, 0.84);
         diskColor += emission * (1.0 - diskAlpha);
         diskAlpha += alpha * (1.0 - diskAlpha);
       }
@@ -266,14 +267,15 @@ void main() {
   float photonSphere = 3.0 * mass;
   float photonProximity = exp(-abs(minRadius - photonSphere) / (0.18 * mass));
   float orbitBoost = smoothstep(1.25, 5.4, maxPhi);
-  vec3 photonRing = vec3(0.95, 0.64, 0.36) * photonProximity * orbitBoost * 0.78;
+  vec3 photonRing = vec3(1.0, 0.68, 0.32) * photonProximity * orbitBoost * 1.18;
 
   if (captured) {
     float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
     color = vec3(0.0, 0.0006, 0.002) + vec3(0.84, 0.45, 0.18) * rim * 0.26;
   } else {
-    color = mix(color, diskColor + color * 0.12, diskAlpha);
-    color += photonRing;
+    vec3 diskBloom = diskColor * diskColor * 0.18;
+    color = mix(color, diskColor * 1.18 + diskBloom + color * 0.07, diskAlpha);
+    color += photonRing + diskBloom * diskAlpha * 0.34;
   }
 
   float chroma = 0.006 * photonProximity * orbitBoost;
@@ -291,14 +293,14 @@ void main() {
 const initialSettings = {
   mass: 1,
   inclination: 38,
-  cameraRadius: 28,
-  exposure: 0.92,
+  cameraRadius: 24,
+  exposure: 1.28,
   fov: 1.08,
-  steps: 360,
-  diskBrightness: 0.86,
-  accretionRate: 0.38,
-  alphaViscosity: 0.22,
-  timeScale: 0.52,
+  steps: 420,
+  diskBrightness: 1.35,
+  accretionRate: 0.82,
+  alphaViscosity: 0.3,
+  timeScale: 0.68,
   yaw: 0,
   panX: 0,
   panY: 0,
@@ -668,9 +670,9 @@ function bootCanvasFallback(canvas) {
     const hydroOpacity = settings.diskBrightness * Math.pow(settings.accretionRate, 0.55);
     const turbulentContrast = 0.88 + Math.sqrt(settings.alphaViscosity) * 0.18;
     diskGradient.addColorStop(0.18, "rgba(255, 237, 180, 0)");
-    diskGradient.addColorStop(0.31, `rgba(248, 221, 170, ${0.22 * hydroOpacity * turbulentContrast})`);
-    diskGradient.addColorStop(0.52, `rgba(178, 104, 48, ${0.13 * hydroOpacity})`);
-    diskGradient.addColorStop(0.78, `rgba(80, 88, 116, ${0.06 * hydroOpacity})`);
+    diskGradient.addColorStop(0.3, `rgba(255, 238, 185, ${0.42 * hydroOpacity * turbulentContrast})`);
+    diskGradient.addColorStop(0.5, `rgba(235, 132, 48, ${0.28 * hydroOpacity})`);
+    diskGradient.addColorStop(0.75, `rgba(126, 92, 58, ${0.13 * hydroOpacity})`);
     diskGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = diskGradient;
     ctx.beginPath();
@@ -680,8 +682,8 @@ function bootCanvasFallback(canvas) {
 
     const lensGlow = ctx.createRadialGradient(cx, cy, ring * 0.75, cx, cy, ring * 1.38);
     lensGlow.addColorStop(0, "rgba(0, 0, 0, 0)");
-    lensGlow.addColorStop(0.62, "rgba(214, 139, 66, 0.48)");
-    lensGlow.addColorStop(0.78, "rgba(245, 218, 164, 0.24)");
+    lensGlow.addColorStop(0.6, "rgba(255, 154, 54, 0.78)");
+    lensGlow.addColorStop(0.78, "rgba(255, 225, 156, 0.42)");
     lensGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = lensGlow;
     ctx.beginPath();
