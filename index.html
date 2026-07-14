@@ -33,13 +33,13 @@
         </a>
         <div class="hud-readout">
           <span id="status-label">Starting geodesic renderer</span>
-          <span>Schwarzschild · RK4 · GitHub Pages</span>
+          <span>u(phi) coordinates / RK4 / GitHub Pages</span>
         </div>
       </header>
 
       <section class="hero-mark" aria-label="Project summary">
-        <span>Schwarzschild null geodesics</span>
-        <strong>thin-disk lensing model</strong>
+        <span>Schwarzschild u(phi) geodesics</span>
+        <strong>reduced hydrodynamic disk</strong>
       </section>
 
       <button
@@ -125,12 +125,12 @@
 
               <label class="control">
                 <span>
-                  Inclination <strong id="inclination-value">38°</strong>
+                  Inclination <strong id="inclination-value">38 deg</strong>
                 </span>
                 <input
                   data-control="inclination"
                   data-value="inclination-value"
-                  data-unit="°"
+                  data-unit=" deg"
                   data-precision="0"
                   type="range"
                   min="8"
@@ -202,6 +202,38 @@
               </label>
 
               <label class="control">
+                <span>
+                  Mdot rate <strong id="accretionRate-value">0.38</strong>
+                </span>
+                <input
+                  data-control="accretionRate"
+                  data-value="accretionRate-value"
+                  data-precision="2"
+                  type="range"
+                  min="0.04"
+                  max="1.2"
+                  step="0.01"
+                  value="0.38"
+                />
+              </label>
+
+              <label class="control">
+                <span>
+                  Viscosity alpha <strong id="alphaViscosity-value">0.22</strong>
+                </span>
+                <input
+                  data-control="alphaViscosity"
+                  data-value="alphaViscosity-value"
+                  data-precision="2"
+                  type="range"
+                  min="0.02"
+                  max="0.5"
+                  step="0.01"
+                  value="0.22"
+                />
+              </label>
+
+              <label class="control">
                 <span>Steps <strong id="steps-value">360</strong></span>
                 <input
                   data-control="steps"
@@ -256,20 +288,20 @@
               </article>
               <article>
                 <span>Null geodesic</span>
-                <code>(dr/dλ)² = E² − (1 − 2M/r)L²/r²</code>
-                <p>Each pixel launches a photon backward from the camera.</p>
+                <code>d2u/dphi2 + u = 3 M u2</code>
+                <p>Each pixel traces a photon in reciprocal-radius coordinates.</p>
               </article>
               <article>
                 <span>Capture</span>
-                <strong>r ≤ 2M</strong>
+                <strong>r &lt;= 2M</strong>
                 <p>Rays crossing the event horizon become the shadow.</p>
               </article>
               <article>
                 <span>Accretion disk</span>
-                <strong>Thin disk, ISCO at 6M</strong>
+                <strong>alpha-disk hydro approximation</strong>
                 <p>
-                  Flux follows a Novikov-Thorne-style radial profile with
-                  Doppler and gravitational redshift.
+                  Keplerian shear, viscosity, surface density, optical depth,
+                  temperature, Doppler beaming, and redshift drive the emission.
                 </p>
               </article>
             </div>

@@ -17,6 +17,8 @@ uniform float uExposure;
 uniform float uFov;
 uniform float uDiskBrightness;
 uniform float uCameraRadius;
+uniform float uAccretionRate;
+uniform float uAlphaViscosity;
 uniform float uYaw;
 uniform vec2 uPan;
 uniform int uSteps;
@@ -89,31 +91,39 @@ vec3 backgroundSky(vec3 d) {
   return base + dust + coldGas + starColor * stars * 1.35;
 }
 
-vec3 geodesicDerivative(vec3 state, float angularMomentum, float mass) {
-  float r = max(state.x, 2.02 * mass);
-  float invR = 1.0 / r;
-  float l2 = angularMomentum * angularMomentum;
-
-  float radialAcceleration = l2 * invR * invR * invR - 3.0 * mass * l2 * invR * invR * invR * invR;
-  float angularRate = angularMomentum * invR * invR;
-  return vec3(state.y, radialAcceleration, angularRate);
+vec3 geodesicDerivative(vec3 state, float mass) {
+  float u = max(state.x, 0.0);
+  return vec3(state.y, 3.0 * mass * u * u - u, 1.0);
 }
 
-vec3 rk4Step(vec3 state, float angularMomentum, float mass, float h) {
-  vec3 k1 = geodesicDerivative(state, angularMomentum, mass);
-  vec3 k2 = geodesicDerivative(state + 0.5 * h * k1, angularMomentum, mass);
-  vec3 k3 = geodesicDerivative(state + 0.5 * h * k2, angularMomentum, mass);
-  vec3 k4 = geodesicDerivative(state + h * k3, angularMomentum, mass);
+vec3 rk4Step(vec3 state, float mass, float h) {
+  vec3 k1 = geodesicDerivative(state, mass);
+  vec3 k2 = geodesicDerivative(state + 0.5 * h * k1, mass);
+  vec3 k3 = geodesicDerivative(state + 0.5 * h * k2, mass);
+  vec3 k4 = geodesicDerivative(state + h * k3, mass);
   return state + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+}
+
+float radiusFromU(float u) {
+  return 1.0 / max(u, 0.000001);
 }
 
 vec3 positionFromPlane(float r, float phi, vec3 eRadial, vec3 eTangent) {
   return r * (cos(phi) * eRadial + sin(phi) * eTangent);
 }
 
-float thinDiskFlux(float radius, float isco) {
+float schwarzschildOmega(float radius, float mass) {
+  return sqrt(mass / max(radius * radius * radius, 0.000001));
+}
+
+float orbitalVelocity(float radius, float mass) {
+  return clamp(sqrt(mass / max(radius - 2.0 * mass, 0.35 * mass)), 0.0, 0.72);
+}
+
+float thinDiskFlux(float radius, float isco, float mass, float accretionRate) {
   float x = max(radius / isco, 1.0001);
-  return max(0.0, pow(x, -3.0) * (1.0 - sqrt(1.0 / x)));
+  float noTorque = max(0.0, 1.0 - sqrt(1.0 / x));
+  return (3.0 * mass * accretionRate / (8.0 * PI * pow(max(radius, isco), 3.0))) * noTorque;
 }
 
 vec3 diskBlackbodyColor(float heat) {
@@ -131,29 +141,46 @@ vec3 diskEmission(vec3 hitPosition, vec3 rayStep, float mass) {
   float diskRadius = length(hitPosition.xz);
   float angle = atan(hitPosition.z, hitPosition.x);
   float isco = 6.0 * mass;
-  float outer = 30.0 * mass;
-  float radialMask = smoothstep(isco, isco + 0.55 * mass, diskRadius) * (1.0 - smoothstep(outer - 4.0 * mass, outer, diskRadius));
+  float outer = 34.0 * mass;
+  float radialMask = smoothstep(isco, isco + 0.42 * mass, diskRadius) * (1.0 - smoothstep(outer - 5.0 * mass, outer, diskRadius));
+  float accretionRate = max(uAccretionRate, 0.01);
+  float alpha = clamp(uAlphaViscosity, 0.01, 0.75);
 
   vec3 tangent = normalize(vec3(-hitPosition.z, 0.0, hitPosition.x));
   vec3 toObserver = normalize(-rayStep);
   float losVelocity = dot(tangent, toObserver);
 
-  float orbitalSpeed = clamp(sqrt(mass / max(diskRadius - 2.0 * mass, 0.45 * mass)), 0.0, 0.68);
+  float omega = schwarzschildOmega(diskRadius, mass);
+  float orbitalSpeed = orbitalVelocity(diskRadius, mass);
   float gamma = 1.0 / sqrt(max(0.08, 1.0 - orbitalSpeed * orbitalSpeed));
   float doppler = 1.0 / max(0.16, gamma * (1.0 - orbitalSpeed * losVelocity));
   float gravitational = sqrt(max(0.018, 1.0 - 2.0 * mass / max(diskRadius, 2.05 * mass)));
   float observedShift = clamp(gravitational * doppler, 0.05, 2.4);
 
-  float flux = thinDiskFlux(diskRadius, isco);
-  float normalizedFlux = flux * 28.0;
+  float aspectRatio = clamp(0.038 * pow(accretionRate, 0.18) * pow(max(diskRadius / isco, 1.0), 0.08) * pow(alpha / 0.22, -0.03), 0.018, 0.12);
+  float soundSpeed = aspectRatio * orbitalSpeed;
+  float scaleHeight = aspectRatio * diskRadius;
+  float viscosity = alpha * soundSpeed * scaleHeight;
+  float noTorque = max(0.025, 1.0 - sqrt(isco / max(diskRadius, isco + 0.001)));
+  float surfaceDensity = accretionRate / max(3.0 * PI * viscosity * noTorque, 0.00001);
+  float opticalDepth = 1.0 - exp(-clamp(surfaceDensity * 0.072, 0.0, 9.0));
+
+  float flux = thinDiskFlux(diskRadius, isco, mass, accretionRate);
+  float normalizedFlux = flux * 48000.0;
   float heat = clamp(pow(max(normalizedFlux, 0.0), 0.25) * observedShift, 0.0, 1.0);
 
-  float granular = noise3(vec3(hitPosition.xz * 0.22, uTime * 0.055));
-  float shear = 1.0 + 0.045 * sin(angle * 2.0 - log(max(diskRadius, 0.1)) * 7.5 + uTime * 0.42);
-  float turbulence = mix(0.92, 1.08, granular) * shear;
+  float orbitalPhase = angle - omega * uTime * 34.0;
+  float eddyScale = clamp(diskRadius / max(scaleHeight * 2.6, 0.001), 4.0, 34.0);
+  vec2 eddyPlane = vec2(cos(orbitalPhase), sin(orbitalPhase)) * eddyScale;
+  float eddyA = noise3(vec3(eddyPlane, log(max(diskRadius / isco, 1.0)) * 2.7 + uTime * alpha * 0.5));
+  float eddyB = noise3(vec3(eddyPlane * 2.15 + 8.0, log(max(diskRadius, 0.1)) * 4.2 - uTime * 0.18));
+  float turbulentMach = clamp(sqrt(alpha) * 0.62, 0.06, 0.58);
+  float densityPerturbation = 1.0 + turbulentMach * (0.26 * (eddyA - 0.5) + 0.12 * (eddyB - 0.5));
+  float shearTexture = 1.0 + turbulentMach * 0.05 * sin(2.0 * orbitalPhase - 7.0 * log(max(diskRadius / isco, 1.0)));
+  float turbulence = clamp(densityPerturbation * shearTexture, 0.68, 1.34);
   float beaming = pow(observedShift, 3.35);
   float limbSoftening = mix(0.72, 1.0, smoothstep(0.05, 0.42, abs(toObserver.y)));
-  float brightness = radialMask * normalizedFlux * beaming * turbulence * limbSoftening;
+  float brightness = radialMask * normalizedFlux * beaming * turbulence * limbSoftening * opticalDepth;
 
   vec3 color = diskBlackbodyColor(heat);
   return color * brightness * uDiskBrightness;
@@ -182,10 +209,12 @@ void main() {
   vec3 eTangent = sinAlpha > 0.0001 ? normalize(transverse) : right;
 
   float lapse = sqrt(max(0.001, 1.0 - 2.0 * mass / cameraRadius));
-  float angularMomentum = cameraRadius * sinAlpha / lapse;
-  vec3 state = vec3(cameraRadius, -cosAlpha, 0.0);
+  float impactParameter = cameraRadius * max(sinAlpha, 0.00045) / lapse;
+  float u0 = 1.0 / cameraRadius;
+  float radialPotential = max(0.0, 1.0 / (impactParameter * impactParameter) - u0 * u0 + 2.0 * mass * u0 * u0 * u0);
+  vec3 state = vec3(u0, sqrt(radialPotential), 0.0);
 
-  vec3 previousPosition = positionFromPlane(state.x, state.z, eRadial, eTangent);
+  vec3 previousPosition = positionFromPlane(cameraRadius, state.z, eRadial, eTangent);
   vec3 diskColor = vec3(0.0);
   float diskAlpha = 0.0;
   float minRadius = cameraRadius;
@@ -198,16 +227,19 @@ void main() {
       break;
     }
 
-    float adaptive = mix(0.026, 0.34, smoothstep(2.6 * mass, 18.0 * mass, state.x));
-    vec3 nextState = rk4Step(state, angularMomentum, mass, adaptive);
-    vec3 nextPosition = positionFromPlane(nextState.x, nextState.z, eRadial, eTangent);
+    float radius = radiusFromU(state.x);
+    float adaptive = mix(0.0045, 0.032, smoothstep(2.35 * mass, 42.0 * mass, radius));
+    adaptive *= mix(0.68, 1.0, smoothstep(0.0, 0.22, sinAlpha));
+    vec3 nextState = rk4Step(state, mass, adaptive);
+    float nextRadius = radiusFromU(nextState.x);
+    vec3 nextPosition = positionFromPlane(nextRadius, nextState.z, eRadial, eTangent);
     vec3 rayStep = nextPosition - previousPosition;
 
     if (diskAlpha < 0.94 && previousPosition.y * nextPosition.y <= 0.0) {
       float crossing = abs(previousPosition.y) / max(abs(previousPosition.y - nextPosition.y), 0.0001);
       vec3 hit = mix(previousPosition, nextPosition, clamp(crossing, 0.0, 1.0));
       float diskRadius = length(hit.xz);
-      if (diskRadius > 5.98 * mass && diskRadius < 30.4 * mass) {
+      if (diskRadius > 5.98 * mass && diskRadius < 34.4 * mass) {
         vec3 emission = diskEmission(hit, rayStep, mass);
         float alpha = clamp(length(emission) * 0.105, 0.0, 0.58);
         diskColor += emission * (1.0 - diskAlpha);
@@ -217,13 +249,13 @@ void main() {
 
     state = nextState;
     previousPosition = nextPosition;
-    minRadius = min(minRadius, state.x);
+    minRadius = min(minRadius, nextRadius);
     maxPhi = max(maxPhi, abs(state.z));
 
-    if (state.x <= 2.012 * mass) {
+    if (state.x >= 1.0 / (2.012 * mass)) {
       captured = true;
     }
-    if (state.x > escapeRadius && state.y > 0.0) {
+    if ((state.x <= 0.0 || nextRadius > escapeRadius) && state.y < 0.0 && state.z > 0.05) {
       escaped = true;
     }
   }
@@ -264,6 +296,8 @@ const initialSettings = {
   fov: 1.08,
   steps: 360,
   diskBrightness: 0.86,
+  accretionRate: 0.38,
+  alphaViscosity: 0.22,
   timeScale: 0.52,
   yaw: 0,
   panX: 0,
@@ -628,13 +662,15 @@ function bootCanvasFallback(canvas) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(settings.yaw - 0.22 + Math.sin(simulationTime * 0.16) * 0.08);
-    ctx.scale(1.55, 0.35 + settings.inclination / 220);
+    ctx.scale(1.68, 0.32 + settings.inclination / 235);
 
     const diskGradient = ctx.createRadialGradient(0, 0, horizon * 1.55, 0, 0, scale * 0.48);
+    const hydroOpacity = settings.diskBrightness * Math.pow(settings.accretionRate, 0.55);
+    const turbulentContrast = 0.88 + Math.sqrt(settings.alphaViscosity) * 0.18;
     diskGradient.addColorStop(0.18, "rgba(255, 237, 180, 0)");
-    diskGradient.addColorStop(0.3, `rgba(248, 221, 170, ${0.24 * settings.diskBrightness})`);
-    diskGradient.addColorStop(0.5, `rgba(178, 104, 48, ${0.15 * settings.diskBrightness})`);
-    diskGradient.addColorStop(0.76, `rgba(80, 88, 116, ${0.08 * settings.diskBrightness})`);
+    diskGradient.addColorStop(0.31, `rgba(248, 221, 170, ${0.22 * hydroOpacity * turbulentContrast})`);
+    diskGradient.addColorStop(0.52, `rgba(178, 104, 48, ${0.13 * hydroOpacity})`);
+    diskGradient.addColorStop(0.78, `rgba(80, 88, 116, ${0.06 * hydroOpacity})`);
     diskGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = diskGradient;
     ctx.beginPath();
@@ -723,6 +759,8 @@ function bootSimulation() {
     exposure: gl.getUniformLocation(program, "uExposure"),
     fov: gl.getUniformLocation(program, "uFov"),
     cameraRadius: gl.getUniformLocation(program, "uCameraRadius"),
+    accretionRate: gl.getUniformLocation(program, "uAccretionRate"),
+    alphaViscosity: gl.getUniformLocation(program, "uAlphaViscosity"),
     yaw: gl.getUniformLocation(program, "uYaw"),
     pan: gl.getUniformLocation(program, "uPan"),
     steps: gl.getUniformLocation(program, "uSteps"),
@@ -769,13 +807,15 @@ function bootSimulation() {
     gl.uniform1f(uniforms.exposure, settings.exposure);
     gl.uniform1f(uniforms.fov, settings.fov);
     gl.uniform1f(uniforms.cameraRadius, settings.cameraRadius);
+    gl.uniform1f(uniforms.accretionRate, settings.accretionRate);
+    gl.uniform1f(uniforms.alphaViscosity, settings.alphaViscosity);
     gl.uniform1f(uniforms.yaw, settings.yaw);
     gl.uniform2f(uniforms.pan, settings.panX, settings.panY);
     gl.uniform1f(uniforms.diskBrightness, settings.diskBrightness);
     gl.uniform1i(uniforms.steps, settings.steps);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-    updateStatus("running", "Tracing null geodesics");
+    updateStatus("running", "Tracing u(phi) geodesics");
     window.requestAnimationFrame(render);
   };
 
