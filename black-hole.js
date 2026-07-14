@@ -72,6 +72,36 @@ float starLayer(vec2 uv, float scale, float threshold, float radius) {
   return core * step(threshold, rnd) * pow(rnd, 14.0);
 }
 
+float arcStarLayer(vec2 p, float angularScale, float radialScale, float threshold, float arcLength, float arcWidth) {
+  float r = max(length(p), 0.001);
+  float theta = atan(p.y, p.x) / TAU + 0.5;
+  vec2 grid = vec2(theta * angularScale, log(r + 0.08) * radialScale);
+  vec2 cell = floor(grid);
+  vec2 local = fract(grid);
+  float rnd = hash21(cell + vec2(31.7, 9.2));
+  vec2 point = vec2(hash21(cell + 4.2), hash21(cell + 19.6));
+  float da = abs(local.x - point.x);
+  da = min(da, 1.0 - da);
+  float dr = abs(local.y - point.y);
+  float d = sqrt((da / arcLength) * (da / arcLength) + (dr / arcWidth) * (dr / arcWidth));
+  return smoothstep(1.0, 0.0, d) * step(threshold, rnd) * pow(rnd, 9.5);
+}
+
+vec3 lensedStarStreaks(vec2 p, float strength) {
+  float r = length(p);
+  float annulus = smoothstep(0.2, 0.44, r) * (1.0 - smoothstep(1.18, 1.85, r));
+  float s = clamp(strength * annulus, 0.0, 1.0);
+  float arcLength = mix(0.06, 0.44, s);
+  float arcWidth = mix(0.034, 0.072, s);
+
+  float stars = 0.0;
+  stars += arcStarLayer(p, 62.0, 34.0, 0.968, arcLength, arcWidth);
+  stars += arcStarLayer(p + vec2(0.013, -0.021), 118.0, 48.0, 0.988, arcLength * 0.82, arcWidth * 0.78) * 1.2;
+
+  vec3 starColor = mix(vec3(0.68, 0.78, 0.96), vec3(1.0, 0.82, 0.56), hash21(floor(p * 150.0)));
+  return starColor * stars * s * 1.7;
+}
+
 vec3 backgroundSky(vec3 d) {
   vec2 uv = vec2(atan(d.x, d.z) / TAU + 0.5, asin(clamp(d.y, -1.0, 1.0)) / PI + 0.5);
   float bandShape = abs(d.y * 2.25 + 0.09 * sin(4.4 * d.x + 1.7 * d.z));
@@ -127,13 +157,15 @@ float thinDiskFlux(float radius, float isco, float mass, float accretionRate) {
 }
 
 vec3 diskBlackbodyColor(float heat) {
-  vec3 dimRed = vec3(0.26, 0.075, 0.025);
-  vec3 amber = vec3(0.95, 0.54, 0.24);
-  vec3 warmWhite = vec3(1.0, 0.88, 0.66);
-  vec3 whiteHot = vec3(0.95, 0.96, 0.92);
-  vec3 color = mix(dimRed, amber, smoothstep(0.08, 0.44, heat));
-  color = mix(color, warmWhite, smoothstep(0.38, 0.78, heat));
-  color = mix(color, whiteHot, smoothstep(0.78, 1.0, heat));
+  vec3 ember = vec3(0.36, 0.075, 0.018);
+  vec3 orange = vec3(1.0, 0.34, 0.055);
+  vec3 sodium = vec3(1.0, 0.64, 0.18);
+  vec3 gold = vec3(1.0, 0.68, 0.22);
+  vec3 paleGold = vec3(1.0, 0.78, 0.36);
+  vec3 color = mix(ember, orange, smoothstep(0.05, 0.38, heat));
+  color = mix(color, sodium, smoothstep(0.32, 0.68, heat));
+  color = mix(color, gold, smoothstep(0.62, 0.94, heat));
+  color = mix(color, paleGold, smoothstep(0.94, 1.0, heat) * 0.32);
   return color;
 }
 
@@ -267,15 +299,21 @@ void main() {
   float photonSphere = 3.0 * mass;
   float photonProximity = exp(-abs(minRadius - photonSphere) / (0.18 * mass));
   float orbitBoost = smoothstep(1.25, 5.4, maxPhi);
-  vec3 photonRing = vec3(1.0, 0.68, 0.32) * photonProximity * orbitBoost * 1.18;
+  float lensStrength = clamp(photonProximity * orbitBoost * 1.8, 0.0, 1.0);
+  vec3 photonRing = vec3(1.0, 0.62, 0.24) * photonProximity * orbitBoost * 0.34;
+  vec3 starStreaks = lensedStarStreaks(centered, lensStrength) * (1.0 - diskAlpha * 0.72);
+  vec3 ringUnderlay = photonRing * (1.0 - diskAlpha * 0.94);
+  vec3 diskBloom = diskColor * diskColor * 0.1;
+  vec3 diskLayer = diskColor * 1.08 + diskBloom;
+  color = color * (1.0 - 0.38 * lensStrength) + starStreaks + ringUnderlay;
 
   if (captured) {
     float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
-    color = vec3(0.0, 0.0006, 0.002) + vec3(0.84, 0.45, 0.18) * rim * 0.26;
+    vec3 shadowColor = vec3(0.0, 0.00045, 0.0015) + vec3(0.52, 0.26, 0.08) * rim * 0.08;
+    color = mix(shadowColor + ringUnderlay * 0.25, diskLayer, diskAlpha);
   } else {
-    vec3 diskBloom = diskColor * diskColor * 0.18;
-    color = mix(color, diskColor * 1.18 + diskBloom + color * 0.07, diskAlpha);
-    color += photonRing + diskBloom * diskAlpha * 0.34;
+    color = mix(color, diskLayer + color * 0.06, diskAlpha);
+    color += diskBloom * diskAlpha * 0.16;
   }
 
   float chroma = 0.006 * photonProximity * orbitBoost;
@@ -682,8 +720,8 @@ function bootCanvasFallback(canvas) {
 
     const lensGlow = ctx.createRadialGradient(cx, cy, ring * 0.75, cx, cy, ring * 1.38);
     lensGlow.addColorStop(0, "rgba(0, 0, 0, 0)");
-    lensGlow.addColorStop(0.6, "rgba(255, 154, 54, 0.78)");
-    lensGlow.addColorStop(0.78, "rgba(255, 225, 156, 0.42)");
+    lensGlow.addColorStop(0.6, "rgba(255, 154, 54, 0.34)");
+    lensGlow.addColorStop(0.78, "rgba(255, 225, 156, 0.18)");
     lensGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = lensGlow;
     ctx.beginPath();
