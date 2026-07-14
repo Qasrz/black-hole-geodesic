@@ -83,23 +83,26 @@ float arcStarLayer(vec2 p, float angularScale, float radialScale, float threshol
   float da = abs(local.x - point.x);
   da = min(da, 1.0 - da);
   float dr = abs(local.y - point.y);
-  float d = sqrt((da / arcLength) * (da / arcLength) + (dr / arcWidth) * (dr / arcWidth));
-  return smoothstep(1.0, 0.0, d) * step(threshold, rnd) * pow(rnd, 9.5);
+  float span = arcLength * (0.72 + 0.58 * rnd);
+  float along = 1.0 - smoothstep(span * 0.18, span, da);
+  float across = exp(-(dr * dr) / max(arcWidth * arcWidth, 0.00001));
+  float feather = exp(-(da * da) / max(span * span * 0.42, 0.00001)) * (1.0 - smoothstep(arcWidth, arcWidth * 2.8, dr));
+  return (along * across + feather * 0.22) * step(threshold, rnd) * pow(rnd, 8.5);
 }
 
 vec3 lensedStarStreaks(vec2 p, float strength) {
   float r = length(p);
   float annulus = smoothstep(0.2, 0.44, r) * (1.0 - smoothstep(1.18, 1.85, r));
   float s = clamp(strength * annulus, 0.0, 1.0);
-  float arcLength = mix(0.34, 1.22, s);
-  float arcWidth = mix(0.025, 0.058, s);
+  float arcLength = mix(0.12, 0.48, s);
+  float arcWidth = mix(0.012, 0.034, s);
 
   float stars = 0.0;
-  stars += arcStarLayer(p, 24.0, 28.0, 0.94, arcLength, arcWidth);
-  stars += arcStarLayer(p + vec2(0.013, -0.021), 42.0, 40.0, 0.968, arcLength * 0.9, arcWidth * 0.76) * 1.18;
+  stars += arcStarLayer(p, 18.0, 26.0, 0.935, arcLength, arcWidth);
+  stars += arcStarLayer(p + vec2(0.013, -0.021), 30.0, 36.0, 0.962, arcLength * 0.86, arcWidth * 0.72) * 1.12;
 
   vec3 starColor = mix(vec3(0.68, 0.78, 0.96), vec3(1.0, 0.82, 0.56), hash21(floor(p * 150.0)));
-  return starColor * stars * s * 1.45;
+  return starColor * stars * s * 1.72;
 }
 
 vec3 backgroundSky(vec3 d) {
@@ -157,76 +160,24 @@ float thinDiskFlux(float radius, float isco, float mass, float accretionRate) {
 }
 
 vec3 diskBlackbodyColor(float heat) {
-  vec3 ember = vec3(0.36, 0.075, 0.018);
-  vec3 orange = vec3(1.0, 0.34, 0.055);
-  vec3 sodium = vec3(1.0, 0.64, 0.18);
-  vec3 gold = vec3(1.0, 0.68, 0.22);
-  vec3 paleGold = vec3(1.0, 0.78, 0.36);
-  vec3 color = mix(ember, orange, smoothstep(0.05, 0.38, heat));
-  color = mix(color, sodium, smoothstep(0.32, 0.68, heat));
-  color = mix(color, gold, smoothstep(0.62, 0.94, heat));
-  color = mix(color, paleGold, smoothstep(0.94, 1.0, heat) * 0.32);
+  vec3 ember = vec3(0.28, 0.032, 0.006);
+  vec3 red = vec3(0.92, 0.095, 0.012);
+  vec3 orange = vec3(1.0, 0.30, 0.035);
+  vec3 amber = vec3(1.0, 0.50, 0.075);
+  vec3 blaze = vec3(1.0, 0.62, 0.12);
+  vec3 color = mix(ember, red, smoothstep(0.04, 0.28, heat));
+  color = mix(color, orange, smoothstep(0.22, 0.58, heat));
+  color = mix(color, amber, smoothstep(0.50, 0.86, heat));
+  color = mix(color, blaze, smoothstep(0.82, 1.0, heat) * 0.42);
   return color;
-}
-
-vec3 diskFireColor(float heat) {
-  vec3 deep = vec3(0.28, 0.035, 0.006);
-  vec3 red = vec3(0.95, 0.11, 0.012);
-  vec3 orange = vec3(1.0, 0.38, 0.035);
-  vec3 amber = vec3(1.0, 0.66, 0.16);
-  vec3 color = mix(deep, red, smoothstep(0.02, 0.28, heat));
-  color = mix(color, orange, smoothstep(0.22, 0.64, heat));
-  color = mix(color, amber, smoothstep(0.62, 1.0, heat));
-  return color;
-}
-
-vec4 lensedDiskImage(vec2 p, float cameraRadius, float mass) {
-  float zoom = pow(24.0 / max(cameraRadius, 1.0), 0.42);
-  vec2 q = p / max(zoom, 0.2);
-  float shadow = length(vec2(q.x * 1.05, (q.y + 0.018) * 1.22));
-  float outsideShadow = smoothstep(0.345, 0.405, shadow);
-
-  vec2 primarySpace = vec2(q.x / 1.28, (q.y + 0.165) / 0.255);
-  float primaryRadius = length(primarySpace);
-  float primaryAngle = atan(primarySpace.y, primarySpace.x);
-  float primaryBand = smoothstep(0.38, 0.46, primaryRadius) * (1.0 - smoothstep(1.08, 1.36, primaryRadius));
-  float lowerWeight = smoothstep(0.26, -0.16, q.y);
-
-  float archY = 0.155 + 0.285 * exp(-q.x * q.x * 1.95);
-  float archWidth = 0.045 + 0.038 * exp(-q.x * q.x * 2.4);
-  float arch = smoothstep(archWidth, 0.0, abs(q.y - archY));
-  arch *= smoothstep(1.28, 0.72, abs(q.x));
-  arch *= 1.0 - smoothstep(0.56, 0.9, max(0.0, q.y));
-
-  float innerRim = smoothstep(0.014, 0.0, abs(shadow - 0.412)) * smoothstep(-0.1, 0.26, q.y) * smoothstep(0.82, 0.18, abs(q.x));
-
-  float diskMask = clamp(primaryBand * (0.42 + 0.58 * lowerWeight) + arch * 0.9 + innerRim * 0.34, 0.0, 1.0) * outsideShadow;
-  float diskRadius = mix(primaryRadius, 0.45 + abs(q.x) * 0.58, smoothstep(0.05, 0.55, arch));
-  float angle = mix(primaryAngle, atan(q.y - archY, q.x), smoothstep(0.05, 0.55, arch));
-
-  float rings = 0.64 + 0.36 * sin(92.0 * diskRadius + 7.0 * sin(2.0 * angle) - uTime * 1.4);
-  float spiral = 0.72 + 0.28 * sin(18.0 * log(max(diskRadius, 0.08)) - 7.5 * angle + uTime * 2.1);
-  float turbulence = noise3(vec3(primarySpace * 6.0 + vec2(0.0, uTime * 0.16), uTime * 0.08));
-  float clumps = noise3(vec3(primarySpace * 17.0, uTime * 0.18));
-  float ragged = mix(0.72, 1.28, turbulence) * mix(0.86, 1.22, clumps);
-  float sideBoost = mix(0.82, 1.38, smoothstep(0.72, -0.62, q.x));
-
-  float innerHeat = pow(clamp(1.16 - diskRadius, 0.0, 1.0), 0.42);
-  float blaze = diskMask * (0.42 + 1.8 * innerHeat) * rings * spiral * ragged * sideBoost;
-  blaze += innerRim * 1.55;
-  vec3 color = diskFireColor(clamp(innerHeat * 0.9 + arch * 0.32 + innerRim * 0.38, 0.0, 1.0));
-  color *= blaze * uDiskBrightness * mix(0.95, 1.45, smoothstep(0.3, 1.6, uAccretionRate));
-
-  float alpha = clamp(diskMask * (0.38 + blaze * 0.36), 0.0, 0.92);
-  return vec4(color, alpha);
 }
 
 vec3 diskEmission(vec3 hitPosition, vec3 rayStep, float mass) {
   float diskRadius = length(hitPosition.xz);
   float angle = atan(hitPosition.z, hitPosition.x);
   float isco = 6.0 * mass;
-  float outer = 34.0 * mass;
-  float radialMask = smoothstep(isco, isco + 0.42 * mass, diskRadius) * (1.0 - smoothstep(outer - 5.0 * mass, outer, diskRadius));
+  float outer = 42.0 * mass;
+  float radialMask = smoothstep(isco, isco + 0.52 * mass, diskRadius) * (1.0 - smoothstep(outer - 8.0 * mass, outer, diskRadius));
   float accretionRate = max(uAccretionRate, 0.01);
   float alpha = clamp(uAlphaViscosity, 0.01, 0.75);
 
@@ -247,24 +198,26 @@ vec3 diskEmission(vec3 hitPosition, vec3 rayStep, float mass) {
   float viscosity = alpha * soundSpeed * scaleHeight;
   float noTorque = max(0.025, 1.0 - sqrt(isco / max(diskRadius, isco + 0.001)));
   float surfaceDensity = accretionRate / max(3.0 * PI * viscosity * noTorque, 0.00001);
-  float opticalDepth = 1.0 - exp(-clamp(surfaceDensity * 0.072, 0.0, 9.0));
+  float opticalDepth = 1.0 - exp(-clamp(surfaceDensity * 0.056, 0.0, 9.0));
 
   float flux = thinDiskFlux(diskRadius, isco, mass, accretionRate);
-  float normalizedFlux = flux * 145000.0;
-  float heat = clamp(pow(max(normalizedFlux, 0.0), 0.25) * observedShift, 0.0, 1.0);
+  float normalizedFlux = flux * 88000.0;
+  float heat = clamp(pow(max(normalizedFlux, 0.0), 0.23) * observedShift * 0.76, 0.0, 1.0);
 
   float orbitalPhase = angle - omega * uTime * 34.0;
   float eddyScale = clamp(diskRadius / max(scaleHeight * 2.6, 0.001), 4.0, 34.0);
   vec2 eddyPlane = vec2(cos(orbitalPhase), sin(orbitalPhase)) * eddyScale;
   float eddyA = noise3(vec3(eddyPlane, log(max(diskRadius / isco, 1.0)) * 2.7 + uTime * alpha * 0.5));
   float eddyB = noise3(vec3(eddyPlane * 2.15 + 8.0, log(max(diskRadius, 0.1)) * 4.2 - uTime * 0.18));
-  float turbulentMach = clamp(sqrt(alpha) * 0.62, 0.06, 0.58);
-  float densityPerturbation = 1.0 + turbulentMach * (0.26 * (eddyA - 0.5) + 0.12 * (eddyB - 0.5));
-  float shearTexture = 1.0 + turbulentMach * 0.05 * sin(2.0 * orbitalPhase - 7.0 * log(max(diskRadius / isco, 1.0)));
-  float turbulence = clamp(densityPerturbation * shearTexture, 0.68, 1.34);
+  float turbulentMach = clamp(sqrt(alpha) * 0.72, 0.08, 0.68);
+  float densityPerturbation = 1.0 + turbulentMach * (0.50 * (eddyA - 0.5) + 0.24 * (eddyB - 0.5));
+  float ringGrooves = 0.80 + 0.20 * sin(58.0 * log(max(diskRadius / isco, 1.02)) - 4.8 * angle + uTime * 0.92);
+  float shearTexture = 1.0 + turbulentMach * 0.14 * sin(2.6 * orbitalPhase - 8.6 * log(max(diskRadius / isco, 1.0)) + eddyA * 2.0);
+  float spiralRidge = 0.86 + 0.20 * sin(11.0 * log(max(diskRadius / isco, 1.02)) + 3.4 * orbitalPhase + eddyB * 1.7);
+  float turbulence = clamp(densityPerturbation * shearTexture * ringGrooves * spiralRidge, 0.44, 1.58);
   float beaming = pow(observedShift, 3.35);
   float limbSoftening = mix(0.72, 1.0, smoothstep(0.05, 0.42, abs(toObserver.y)));
-  float blazeBoost = mix(1.55, 2.85, smoothstep(0.35, 1.6, accretionRate));
+  float blazeBoost = mix(1.20, 2.05, smoothstep(0.35, 1.6, accretionRate));
   float brightness = radialMask * normalizedFlux * beaming * turbulence * limbSoftening * opticalDepth * blazeBoost;
 
   vec3 color = diskBlackbodyColor(heat);
@@ -307,14 +260,14 @@ void main() {
   bool captured = false;
   bool escaped = false;
 
-  for (int i = 0; i < 520; i++) {
+  for (int i = 0; i < 680; i++) {
     if (i >= uSteps || captured || escaped) {
       break;
     }
 
     float radius = radiusFromU(state.x);
-    float adaptive = mix(0.0045, 0.032, smoothstep(2.35 * mass, 42.0 * mass, radius));
-    adaptive *= mix(0.68, 1.0, smoothstep(0.0, 0.22, sinAlpha));
+    float adaptive = mix(0.0024, 0.023, smoothstep(2.28 * mass, 48.0 * mass, radius));
+    adaptive *= mix(0.58, 1.0, smoothstep(0.0, 0.22, sinAlpha));
     vec3 nextState = rk4Step(state, mass, adaptive);
     float nextRadius = radiusFromU(nextState.x);
     vec3 nextPosition = positionFromPlane(nextRadius, nextState.z, eRadial, eTangent);
@@ -324,9 +277,10 @@ void main() {
       float crossing = abs(previousPosition.y) / max(abs(previousPosition.y - nextPosition.y), 0.0001);
       vec3 hit = mix(previousPosition, nextPosition, clamp(crossing, 0.0, 1.0));
       float diskRadius = length(hit.xz);
-      if (diskRadius > 5.98 * mass && diskRadius < 34.4 * mass) {
+      if (diskRadius > 5.98 * mass && diskRadius < 42.4 * mass) {
         vec3 emission = diskEmission(hit, rayStep, mass);
-        float alpha = clamp(length(emission) * 0.24, 0.0, 0.84);
+        float emitted = length(emission);
+        float alpha = clamp(smoothstep(0.0008, 0.035, emitted) * 0.06 + emitted * 0.20, 0.0, 0.82);
         diskColor += emission * (1.0 - diskAlpha);
         diskAlpha += alpha * (1.0 - diskAlpha);
       }
@@ -351,24 +305,20 @@ void main() {
   float photonSphere = 3.0 * mass;
   float photonProximity = exp(-abs(minRadius - photonSphere) / (0.18 * mass));
   float orbitBoost = smoothstep(1.25, 5.4, maxPhi);
-  float lensStrength = clamp(photonProximity * orbitBoost * 1.8, 0.0, 1.0);
-  vec3 photonRing = vec3(1.0, 0.5, 0.16) * photonProximity * orbitBoost * 0.11;
-  vec3 starStreaks = lensedStarStreaks(centered, lensStrength) * (1.0 - diskAlpha * 0.72);
-  vec3 ringUnderlay = photonRing * (1.0 - diskAlpha);
-  vec4 imageDisk = lensedDiskImage(centered, cameraRadius, mass);
-  float combinedDiskAlpha = clamp(diskAlpha + imageDisk.a * (1.0 - diskAlpha), 0.0, 1.0);
-  vec3 combinedDisk = diskColor * diskAlpha + imageDisk.rgb * imageDisk.a * (1.0 - diskAlpha);
-  vec3 diskLayer = combinedDisk / max(combinedDiskAlpha, 0.001);
-  vec3 diskBloom = diskLayer * diskLayer * 0.055;
-  color = color * (1.0 - 0.82 * lensStrength) + starStreaks + ringUnderlay;
+  float lensStrength = clamp(photonProximity * orbitBoost * 1.45, 0.0, 1.0);
+  vec3 photonRing = vec3(1.0, 0.28, 0.045) * photonProximity * orbitBoost * 0.018;
+  vec3 starStreaks = lensedStarStreaks(centered, lensStrength) * (1.0 - diskAlpha * 0.84);
+  vec3 diskLayer = diskColor;
+  vec3 diskBloom = diskLayer * diskLayer * 0.026;
+  color = color * (1.0 - 0.90 * lensStrength) + starStreaks + photonRing * (1.0 - diskAlpha);
 
   if (captured) {
     float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
-    vec3 shadowColor = vec3(0.0, 0.00035, 0.0012) + vec3(0.32, 0.12, 0.035) * rim * 0.035;
-    color = mix(shadowColor + ringUnderlay * 0.08, diskLayer + diskBloom, combinedDiskAlpha);
+    vec3 shadowColor = vec3(0.0, 0.00028, 0.0009) + vec3(0.26, 0.055, 0.012) * rim * 0.015;
+    color = mix(shadowColor, diskLayer + diskBloom, diskAlpha);
   } else {
-    color = mix(color, diskLayer + color * 0.035, combinedDiskAlpha);
-    color += diskBloom * combinedDiskAlpha * 0.12;
+    color = mix(color, diskLayer + color * 0.028, diskAlpha);
+    color += diskBloom * diskAlpha * 0.07;
   }
 
   float chroma = 0.006 * photonProximity * orbitBoost;
@@ -387,10 +337,10 @@ const initialSettings = {
   mass: 1,
   inclination: 38,
   cameraRadius: 24,
-  exposure: 1.08,
+  exposure: 1,
   fov: 1.08,
-  steps: 420,
-  diskBrightness: 1.16,
+  steps: 560,
+  diskBrightness: 1.02,
   accretionRate: 0.72,
   alphaViscosity: 0.3,
   timeScale: 0.68,
