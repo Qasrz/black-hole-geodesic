@@ -91,15 +91,15 @@ vec3 lensedStarStreaks(vec2 p, float strength) {
   float r = length(p);
   float annulus = smoothstep(0.2, 0.44, r) * (1.0 - smoothstep(1.18, 1.85, r));
   float s = clamp(strength * annulus, 0.0, 1.0);
-  float arcLength = mix(0.06, 0.44, s);
-  float arcWidth = mix(0.034, 0.072, s);
+  float arcLength = mix(0.34, 1.22, s);
+  float arcWidth = mix(0.025, 0.058, s);
 
   float stars = 0.0;
-  stars += arcStarLayer(p, 62.0, 34.0, 0.968, arcLength, arcWidth);
-  stars += arcStarLayer(p + vec2(0.013, -0.021), 118.0, 48.0, 0.988, arcLength * 0.82, arcWidth * 0.78) * 1.2;
+  stars += arcStarLayer(p, 24.0, 28.0, 0.94, arcLength, arcWidth);
+  stars += arcStarLayer(p + vec2(0.013, -0.021), 42.0, 40.0, 0.968, arcLength * 0.9, arcWidth * 0.76) * 1.18;
 
   vec3 starColor = mix(vec3(0.68, 0.78, 0.96), vec3(1.0, 0.82, 0.56), hash21(floor(p * 150.0)));
-  return starColor * stars * s * 1.7;
+  return starColor * stars * s * 1.45;
 }
 
 vec3 backgroundSky(vec3 d) {
@@ -167,6 +167,58 @@ vec3 diskBlackbodyColor(float heat) {
   color = mix(color, gold, smoothstep(0.62, 0.94, heat));
   color = mix(color, paleGold, smoothstep(0.94, 1.0, heat) * 0.32);
   return color;
+}
+
+vec3 diskFireColor(float heat) {
+  vec3 deep = vec3(0.28, 0.035, 0.006);
+  vec3 red = vec3(0.95, 0.11, 0.012);
+  vec3 orange = vec3(1.0, 0.38, 0.035);
+  vec3 amber = vec3(1.0, 0.66, 0.16);
+  vec3 color = mix(deep, red, smoothstep(0.02, 0.28, heat));
+  color = mix(color, orange, smoothstep(0.22, 0.64, heat));
+  color = mix(color, amber, smoothstep(0.62, 1.0, heat));
+  return color;
+}
+
+vec4 lensedDiskImage(vec2 p, float cameraRadius, float mass) {
+  float zoom = pow(24.0 / max(cameraRadius, 1.0), 0.42);
+  vec2 q = p / max(zoom, 0.2);
+  float shadow = length(vec2(q.x * 1.05, (q.y + 0.018) * 1.22));
+  float outsideShadow = smoothstep(0.345, 0.405, shadow);
+
+  vec2 primarySpace = vec2(q.x / 1.28, (q.y + 0.165) / 0.255);
+  float primaryRadius = length(primarySpace);
+  float primaryAngle = atan(primarySpace.y, primarySpace.x);
+  float primaryBand = smoothstep(0.38, 0.46, primaryRadius) * (1.0 - smoothstep(1.08, 1.36, primaryRadius));
+  float lowerWeight = smoothstep(0.26, -0.16, q.y);
+
+  float archY = 0.155 + 0.285 * exp(-q.x * q.x * 1.95);
+  float archWidth = 0.045 + 0.038 * exp(-q.x * q.x * 2.4);
+  float arch = smoothstep(archWidth, 0.0, abs(q.y - archY));
+  arch *= smoothstep(1.28, 0.72, abs(q.x));
+  arch *= 1.0 - smoothstep(0.56, 0.9, max(0.0, q.y));
+
+  float innerRim = smoothstep(0.014, 0.0, abs(shadow - 0.412)) * smoothstep(-0.1, 0.26, q.y) * smoothstep(0.82, 0.18, abs(q.x));
+
+  float diskMask = clamp(primaryBand * (0.42 + 0.58 * lowerWeight) + arch * 0.9 + innerRim * 0.34, 0.0, 1.0) * outsideShadow;
+  float diskRadius = mix(primaryRadius, 0.45 + abs(q.x) * 0.58, smoothstep(0.05, 0.55, arch));
+  float angle = mix(primaryAngle, atan(q.y - archY, q.x), smoothstep(0.05, 0.55, arch));
+
+  float rings = 0.64 + 0.36 * sin(92.0 * diskRadius + 7.0 * sin(2.0 * angle) - uTime * 1.4);
+  float spiral = 0.72 + 0.28 * sin(18.0 * log(max(diskRadius, 0.08)) - 7.5 * angle + uTime * 2.1);
+  float turbulence = noise3(vec3(primarySpace * 6.0 + vec2(0.0, uTime * 0.16), uTime * 0.08));
+  float clumps = noise3(vec3(primarySpace * 17.0, uTime * 0.18));
+  float ragged = mix(0.72, 1.28, turbulence) * mix(0.86, 1.22, clumps);
+  float sideBoost = mix(0.82, 1.38, smoothstep(0.72, -0.62, q.x));
+
+  float innerHeat = pow(clamp(1.16 - diskRadius, 0.0, 1.0), 0.42);
+  float blaze = diskMask * (0.42 + 1.8 * innerHeat) * rings * spiral * ragged * sideBoost;
+  blaze += innerRim * 1.55;
+  vec3 color = diskFireColor(clamp(innerHeat * 0.9 + arch * 0.32 + innerRim * 0.38, 0.0, 1.0));
+  color *= blaze * uDiskBrightness * mix(0.95, 1.45, smoothstep(0.3, 1.6, uAccretionRate));
+
+  float alpha = clamp(diskMask * (0.38 + blaze * 0.36), 0.0, 0.92);
+  return vec4(color, alpha);
 }
 
 vec3 diskEmission(vec3 hitPosition, vec3 rayStep, float mass) {
@@ -300,20 +352,23 @@ void main() {
   float photonProximity = exp(-abs(minRadius - photonSphere) / (0.18 * mass));
   float orbitBoost = smoothstep(1.25, 5.4, maxPhi);
   float lensStrength = clamp(photonProximity * orbitBoost * 1.8, 0.0, 1.0);
-  vec3 photonRing = vec3(1.0, 0.62, 0.24) * photonProximity * orbitBoost * 0.34;
+  vec3 photonRing = vec3(1.0, 0.5, 0.16) * photonProximity * orbitBoost * 0.11;
   vec3 starStreaks = lensedStarStreaks(centered, lensStrength) * (1.0 - diskAlpha * 0.72);
-  vec3 ringUnderlay = photonRing * (1.0 - diskAlpha * 0.94);
-  vec3 diskBloom = diskColor * diskColor * 0.1;
-  vec3 diskLayer = diskColor * 1.08 + diskBloom;
-  color = color * (1.0 - 0.38 * lensStrength) + starStreaks + ringUnderlay;
+  vec3 ringUnderlay = photonRing * (1.0 - diskAlpha);
+  vec4 imageDisk = lensedDiskImage(centered, cameraRadius, mass);
+  float combinedDiskAlpha = clamp(diskAlpha + imageDisk.a * (1.0 - diskAlpha), 0.0, 1.0);
+  vec3 combinedDisk = diskColor * diskAlpha + imageDisk.rgb * imageDisk.a * (1.0 - diskAlpha);
+  vec3 diskLayer = combinedDisk / max(combinedDiskAlpha, 0.001);
+  vec3 diskBloom = diskLayer * diskLayer * 0.055;
+  color = color * (1.0 - 0.82 * lensStrength) + starStreaks + ringUnderlay;
 
   if (captured) {
     float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
-    vec3 shadowColor = vec3(0.0, 0.00045, 0.0015) + vec3(0.52, 0.26, 0.08) * rim * 0.08;
-    color = mix(shadowColor + ringUnderlay * 0.25, diskLayer, diskAlpha);
+    vec3 shadowColor = vec3(0.0, 0.00035, 0.0012) + vec3(0.32, 0.12, 0.035) * rim * 0.035;
+    color = mix(shadowColor + ringUnderlay * 0.08, diskLayer + diskBloom, combinedDiskAlpha);
   } else {
-    color = mix(color, diskLayer + color * 0.06, diskAlpha);
-    color += diskBloom * diskAlpha * 0.16;
+    color = mix(color, diskLayer + color * 0.035, combinedDiskAlpha);
+    color += diskBloom * combinedDiskAlpha * 0.12;
   }
 
   float chroma = 0.006 * photonProximity * orbitBoost;
@@ -332,11 +387,11 @@ const initialSettings = {
   mass: 1,
   inclination: 38,
   cameraRadius: 24,
-  exposure: 1.28,
+  exposure: 1.08,
   fov: 1.08,
   steps: 420,
-  diskBrightness: 1.35,
-  accretionRate: 0.82,
+  diskBrightness: 1.16,
+  accretionRate: 0.72,
   alphaViscosity: 0.3,
   timeScale: 0.68,
   yaw: 0,
