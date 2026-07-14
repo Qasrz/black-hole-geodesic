@@ -197,7 +197,7 @@ float thinDiskFlux(float radius, float isco, float mass, float accretionRate) {
 
 float diskAspectRatio(float radius, float mass, float accretionRate, float alpha) {
   float isco = 6.0 * mass;
-  return clamp(0.066 * pow(accretionRate, 0.18) * pow(max(radius / isco, 1.0), 0.09) * pow(alpha / 0.22, -0.03), 0.042, 0.155);
+  return clamp(0.052 * pow(accretionRate, 0.18) * pow(max(radius / isco, 1.0), 0.09) * pow(alpha / 0.22, -0.03), 0.032, 0.125);
 }
 
 float diskScaleHeight(float radius, float mass, float accretionRate, float alpha) {
@@ -306,7 +306,9 @@ void main() {
   bool captured = false;
   bool escaped = false;
 
-  for (int i = 0; i < 680; i++) {
+  float criticalImpact = sqrt(27.0) * mass;
+
+  for (int i = 0; i < 520; i++) {
     if (i >= uSteps || captured || escaped) {
       break;
     }
@@ -319,13 +321,40 @@ void main() {
     vec3 nextPosition = positionFromPlane(nextRadius, nextState.z, eRadial, eTangent);
     vec3 rayStep = nextPosition - previousPosition;
 
-    if (diskAlpha < 0.985) {
+    if (diskAlpha < 0.96) {
       vec3 midPosition = 0.5 * (previousPosition + nextPosition);
       float diskRadius = length(midPosition.xz);
       if (diskRadius > 5.82 * mass && diskRadius < 43.2 * mass) {
         float accretionRate = max(uAccretionRate, 0.01);
         float alphaViscosity = clamp(uAlphaViscosity, 0.01, 0.75);
         float scaleHeight = diskScaleHeight(diskRadius, mass, accretionRate, alphaViscosity);
+        float previousDistance = abs(previousPosition.y);
+        float nextDistance = abs(nextPosition.y);
+        bool crossesDisk = previousPosition.y * nextPosition.y <= 0.0;
+        bool grazesPhotosphere = min(previousDistance, nextDistance) < scaleHeight * 2.7;
+
+        if (!crossesDisk && !grazesPhotosphere) {
+          state = nextState;
+          previousPosition = nextPosition;
+          minRadius = min(minRadius, nextRadius);
+          maxPhi = max(maxPhi, abs(state.z));
+
+          if (state.x >= 1.0 / (2.012 * mass)) {
+            captured = true;
+          }
+          if ((state.x <= 0.0 || nextRadius > escapeRadius) && state.y < 0.0 && state.z > 0.05) {
+            escaped = true;
+          }
+          continue;
+        }
+
+        if (crossesDisk) {
+          float crossing = abs(previousPosition.y) / max(abs(previousPosition.y - nextPosition.y), 0.0001);
+          midPosition = mix(previousPosition, nextPosition, clamp(crossing, 0.0, 1.0));
+          diskRadius = length(midPosition.xz);
+          scaleHeight = diskScaleHeight(diskRadius, mass, accretionRate, alphaViscosity);
+        }
+
         float verticalDistance = abs(midPosition.y) / max(scaleHeight, 0.0001);
         float verticalWeight = exp(-0.5 * verticalDistance * verticalDistance);
 
@@ -334,9 +363,9 @@ void main() {
           float emitted = length(emission);
           float pathLength = length(rayStep);
           float rayInclination = abs(normalize(rayStep).y);
-          float grazingBoost = min(3.6, 1.0 / max(rayInclination, 0.28));
-          float opticalStep = clamp(pathLength / max(scaleHeight, 0.0001) * verticalWeight * grazingBoost * 0.16, 0.0, 0.42);
-          float alpha = clamp((smoothstep(0.0006, 0.028, emitted) * 0.18 + emitted * 0.11) * opticalStep, 0.0, 0.42);
+          float grazingBoost = min(2.6, 1.0 / max(rayInclination, 0.36));
+          float opticalStep = clamp(pathLength / max(scaleHeight, 0.0001) * verticalWeight * grazingBoost * 0.082, 0.0, 0.24);
+          float alpha = clamp((smoothstep(0.0006, 0.028, emitted) * 0.11 + emitted * 0.075) * opticalStep, 0.0, 0.24);
           diskColor += emission * opticalStep * (1.0 - diskAlpha);
           diskAlpha += alpha * (1.0 - diskAlpha);
         }
@@ -363,24 +392,20 @@ void main() {
   float orbitBoost = smoothstep(1.25, 5.4, maxPhi);
   float lensStrength = clamp(photonProximity * orbitBoost * 1.45, 0.0, 1.0);
   vec3 baseSky = backgroundSky(finalDirection);
-  vec3 smearedSky = tangentialSmearedSky(finalDirection, centered, right, up, lensStrength);
-  vec3 quietSky = mix(smearedSky, backgroundNebula(finalDirection), smoothstep(0.28, 0.92, lensStrength) * 0.82);
-  vec3 color = mix(baseSky, quietSky, smoothstep(0.12, 0.92, lensStrength));
+  vec3 quietSky = backgroundNebula(finalDirection);
+  vec3 color = mix(baseSky, quietSky, smoothstep(0.18, 0.95, lensStrength) * 0.74);
   vec3 photonRing = vec3(1.0, 0.20, 0.035) * photonProximity * orbitBoost * 0.004;
   vec3 starStreaks = lensedStarStreaks(centered, lensStrength) * (1.0 - smoothstep(0.04, 0.34, diskAlpha));
   vec3 diskLayer = diskColor;
   vec3 diskBloom = diskLayer * diskLayer * 0.016;
-  float diskCover = smoothstep(0.006, 0.22, diskAlpha);
-  color = color * (1.0 - 0.34 * lensStrength) + starStreaks + photonRing * (1.0 - diskCover);
+  float diskOpacity = clamp(diskAlpha * 0.42, 0.0, 0.34);
+  float shadowMask = (captured ? 1.0 : 0.0) * smoothstep(criticalImpact * 1.08, criticalImpact * 0.96, impactParameter);
+  float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
+  vec3 shadowColor = vec3(0.0, 0.00016, 0.00042) + vec3(0.20, 0.035, 0.006) * rim * 0.003;
 
-  if (captured) {
-    float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
-    vec3 shadowColor = vec3(0.0, 0.00016, 0.00042) + vec3(0.20, 0.035, 0.006) * rim * 0.003;
-    color = mix(shadowColor, diskLayer + diskBloom, diskCover);
-  } else {
-    color = mix(color, diskLayer + color * 0.020, diskCover);
-    color += diskBloom * diskCover * 0.04;
-  }
+  color = color * (1.0 - 0.26 * lensStrength) + starStreaks + photonRing * (1.0 - diskOpacity);
+  color = mix(color, shadowColor, shadowMask);
+  color = color * (1.0 - diskOpacity) + diskLayer + diskBloom * 0.04;
 
   float chroma = 0.002 * photonProximity * orbitBoost;
   color.r += chroma;
@@ -400,7 +425,7 @@ const initialSettings = {
   cameraRadius: 24,
   exposure: 1,
   fov: 1.08,
-  steps: 560,
+  steps: 380,
   diskBrightness: 1.02,
   accretionRate: 0.72,
   alphaViscosity: 0.3,
