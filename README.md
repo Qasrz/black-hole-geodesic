@@ -8,7 +8,8 @@ Live GitHub Pages site:
 
 ## What it demonstrates
 
-- WebGL fragment-shader rendering
+- Plain HTML/CSS/JavaScript with no npm dependency
+- WebGL fragment-shader rendering with a canvas fallback
 - Per-pixel null-geodesic ray integration
 - Schwarzschild event-horizon capture
 - Photon-ring and accretion-disk visualization
@@ -29,5 +30,5 @@ when they cross the event horizon at `r = 2M`.
 
 ## Running locally
 
-No build step is required. Open `index.html` in a browser, or serve the folder
-with any static-file server.
+No install or build step is required. Open `index.html` in a browser, or serve
+the folder with any static-file server.

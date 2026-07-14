@@ -13,226 +13,250 @@
     <script src="black-hole.js" defer></script>
   </head>
   <body>
-    <main class="site-shell">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">Portfolio experiment / General relativity</p>
-          <h1>Black Hole Geodesic</h1>
-          <p class="lede">
-            A browser-based physics demo that bends light with the
-            Schwarzschild null-geodesic equations, then turns the math into an
-            explorable black-hole lensing simulation.
-          </p>
-          <div class="hero-actions" aria-label="Project highlights">
-            <span>WebGL shader kernel</span>
-            <span>RK4 ray integration</span>
-            <span>GitHub Pages</span>
-          </div>
-        </div>
+    <main class="experience" aria-label="Black Hole Geodesic interactive site">
+      <canvas
+        id="black-hole-canvas"
+        class="universe-canvas"
+        aria-label="Full-screen black-hole simulation"
+      ></canvas>
 
-        <aside class="kernel-card" aria-label="Simulation status">
-          <div class="kernel-card__row">
-            <span class="pulse" aria-hidden="true"></span>
-            <span>Relativistic kernel active</span>
-          </div>
-          <div class="kernel-card__metric">
-            <small>Metric</small>
-            <strong>Schwarzschild vacuum</strong>
-          </div>
-          <div class="kernel-card__metric">
-            <small>Photon equation</small>
-            <strong>d²r/dλ² = L²/r³ − 3ML²/r⁴</strong>
-          </div>
-        </aside>
+      <div class="scene-shade" aria-hidden="true"></div>
+
+      <header class="top-hud">
+        <a class="brand" href="#project-panel" aria-label="Black Hole Geodesic">
+          <span
+            id="status-dot"
+            class="status-dot status-dot--booting"
+            aria-hidden="true"
+          ></span>
+          <span>Black Hole Geodesic</span>
+        </a>
+        <div class="hud-readout">
+          <span id="status-label">Starting geodesic renderer</span>
+          <span>Schwarzschild · RK4 · GitHub Pages</span>
+        </div>
+      </header>
+
+      <section class="hero-mark" aria-label="Project introduction">
+        <p>General relativity portfolio experiment</p>
+        <h1>Light bent by spacetime.</h1>
       </section>
 
-      <section class="simulation-panel" aria-label="Black-hole simulation">
-        <div class="viewport-card">
-          <div class="viewport-toolbar">
-            <div>
-              <span
-                id="status-dot"
-                class="status-dot status-dot--booting"
-                aria-hidden="true"
-              ></span>
-              <span id="status-label">Compiling shader kernel</span>
-            </div>
-            <code>Schwarzschild · RK4 · adaptive λ-step</code>
-          </div>
-
-          <div class="canvas-wrap">
-            <canvas
-              id="black-hole-canvas"
-              aria-label="Rendered black-hole simulation"
-            ></canvas>
-            <div id="fallback-message" class="fallback-message" hidden>
-              <strong>WebGL2 is required for the live simulation.</strong>
-              <span>
-                Try a browser or device with WebGL2 enabled to run the photon
-                tracing shader.
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <aside class="control-panel" aria-label="Simulation controls">
-          <div class="control-panel__header">
-            <p>Controls</p>
-            <button id="reset-button" type="button">Reset</button>
-          </div>
-
-          <label class="control">
-            <span>Mass scale <strong id="mass-value">1.00 M</strong></span>
-            <input
-              data-control="mass"
-              data-value="mass-value"
-              data-unit=" M"
-              data-precision="2"
-              type="range"
-              min="0.72"
-              max="1.7"
-              step="0.01"
-              value="1"
-            />
-          </label>
-
-          <label class="control">
-            <span>
-              Camera inclination <strong id="inclination-value">38°</strong>
-            </span>
-            <input
-              data-control="inclination"
-              data-value="inclination-value"
-              data-unit="°"
-              data-precision="0"
-              type="range"
-              min="8"
-              max="72"
-              step="1"
-              value="38"
-            />
-          </label>
-
-          <label class="control">
-            <span>Field of view <strong id="fov-value">1.08</strong></span>
-            <input
-              data-control="fov"
-              data-value="fov-value"
-              data-precision="2"
-              type="range"
-              min="0.82"
-              max="1.44"
-              step="0.01"
-              value="1.08"
-            />
-          </label>
-
-          <label class="control">
-            <span>Exposure <strong id="exposure-value">1.05</strong></span>
-            <input
-              data-control="exposure"
-              data-value="exposure-value"
-              data-precision="2"
-              type="range"
-              min="0.55"
-              max="1.85"
-              step="0.01"
-              value="1.05"
-            />
-          </label>
-
-          <label class="control">
-            <span>
-              Disk brightness <strong id="diskBrightness-value">1.00</strong>
-            </span>
-            <input
-              data-control="diskBrightness"
-              data-value="diskBrightness-value"
-              data-precision="2"
-              type="range"
-              min="0.2"
-              max="1.75"
-              step="0.01"
-              value="1"
-            />
-          </label>
-
-          <label class="control">
-            <span>
-              Integration steps <strong id="steps-value">360</strong>
-            </span>
-            <input
-              data-control="steps"
-              data-value="steps-value"
-              data-precision="0"
-              type="range"
-              min="180"
-              max="520"
-              step="10"
-              value="360"
-            />
-          </label>
-
-          <label class="control">
-            <span>
-              Animation speed <strong id="timeScale-value">0.75</strong>
-            </span>
-            <input
-              data-control="timeScale"
-              data-value="timeScale-value"
-              data-precision="2"
-              type="range"
-              min="0"
-              max="1.6"
-              step="0.01"
-              value="0.75"
-            />
-          </label>
-
-          <button id="pause-button" class="pause-button" type="button">
-            Pause motion
+      <section class="tab-dock" aria-label="Simulation tools">
+        <nav class="tab-list" role="tablist" aria-label="Black-hole panels">
+          <button
+            class="tab-button is-active"
+            id="controls-tab"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="controls-panel"
+            data-tab="controls"
+          >
+            Controls
           </button>
+          <button
+            class="tab-button"
+            id="physics-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="physics-panel"
+            data-tab="physics"
+          >
+            Physics
+          </button>
+          <button
+            class="tab-button"
+            id="project-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="project-panel"
+            data-tab="project"
+          >
+            Project
+          </button>
+        </nav>
 
-          <div class="equation-card">
-            <span>Kernel equation</span>
-            <code>(dr/dλ)² = E² − (1 − 2M/r)L²/r²</code>
-            <p>
-              The shader integrates the equivalent second-order form per pixel
-              and marks a ray captured when r crosses 2M.
-            </p>
-          </div>
-        </aside>
-      </section>
+        <div class="tab-panels">
+          <section
+            class="tab-panel is-active"
+            id="controls-panel"
+            role="tabpanel"
+            aria-labelledby="controls-tab"
+            data-panel="controls"
+          >
+            <div class="control-grid">
+              <label class="control">
+                <span>Mass <strong id="mass-value">1.00 M</strong></span>
+                <input
+                  data-control="mass"
+                  data-value="mass-value"
+                  data-unit=" M"
+                  data-precision="2"
+                  type="range"
+                  min="0.72"
+                  max="1.7"
+                  step="0.01"
+                  value="1"
+                />
+              </label>
 
-      <section class="science-grid" aria-label="Project details">
-        <article>
-          <span>01</span>
-          <h2>Actual geodesics, not a fake swirl</h2>
-          <p>
-            Each screen ray is launched from a finite camera radius with a
-            relativistic impact parameter. The shader integrates the null
-            geodesic radial equation and uses the event horizon as the capture
-            condition.
-          </p>
-        </article>
-        <article>
-          <span>02</span>
-          <h2>Portfolio-ready technical storytelling</h2>
-          <p>
-            The controls expose the mass scale, camera inclination, exposure,
-            and integration quality so the project shows visual polish and
-            engineering decisions at once.
-          </p>
-        </article>
-        <article>
-          <span>03</span>
-          <h2>Phase-two path: Kerr</h2>
-          <p>
-            This first version is intentionally honest: non-rotating
-            Schwarzschild spacetime. The next upgrade can add Kerr geodesics for
-            frame dragging and an asymmetric shadow.
-          </p>
-        </article>
+              <label class="control">
+                <span>
+                  Inclination <strong id="inclination-value">38°</strong>
+                </span>
+                <input
+                  data-control="inclination"
+                  data-value="inclination-value"
+                  data-unit="°"
+                  data-precision="0"
+                  type="range"
+                  min="8"
+                  max="72"
+                  step="1"
+                  value="38"
+                />
+              </label>
+
+              <label class="control">
+                <span>Field <strong id="fov-value">1.08</strong></span>
+                <input
+                  data-control="fov"
+                  data-value="fov-value"
+                  data-precision="2"
+                  type="range"
+                  min="0.82"
+                  max="1.44"
+                  step="0.01"
+                  value="1.08"
+                />
+              </label>
+
+              <label class="control">
+                <span>Exposure <strong id="exposure-value">1.05</strong></span>
+                <input
+                  data-control="exposure"
+                  data-value="exposure-value"
+                  data-precision="2"
+                  type="range"
+                  min="0.55"
+                  max="1.85"
+                  step="0.01"
+                  value="1.05"
+                />
+              </label>
+
+              <label class="control">
+                <span>
+                  Disk <strong id="diskBrightness-value">1.00</strong>
+                </span>
+                <input
+                  data-control="diskBrightness"
+                  data-value="diskBrightness-value"
+                  data-precision="2"
+                  type="range"
+                  min="0.2"
+                  max="1.75"
+                  step="0.01"
+                  value="1"
+                />
+              </label>
+
+              <label class="control">
+                <span>Steps <strong id="steps-value">360</strong></span>
+                <input
+                  data-control="steps"
+                  data-value="steps-value"
+                  data-precision="0"
+                  type="range"
+                  min="180"
+                  max="520"
+                  step="10"
+                  value="360"
+                />
+              </label>
+
+              <label class="control">
+                <span>Speed <strong id="timeScale-value">0.75</strong></span>
+                <input
+                  data-control="timeScale"
+                  data-value="timeScale-value"
+                  data-precision="2"
+                  type="range"
+                  min="0"
+                  max="1.6"
+                  step="0.01"
+                  value="0.75"
+                />
+              </label>
+            </div>
+
+            <div class="dock-actions">
+              <button id="pause-button" class="dock-button" type="button">
+                Pause motion
+              </button>
+              <button id="reset-button" class="dock-button" type="button">
+                Reset defaults
+              </button>
+            </div>
+          </section>
+
+          <section
+            class="tab-panel"
+            id="physics-panel"
+            role="tabpanel"
+            aria-labelledby="physics-tab"
+            data-panel="physics"
+            hidden
+          >
+            <div class="info-grid">
+              <article>
+                <span>Metric</span>
+                <strong>Schwarzschild vacuum</strong>
+                <p>Non-rotating black hole, measured in geometric units.</p>
+              </article>
+              <article>
+                <span>Null geodesic</span>
+                <code>(dr/dλ)² = E² − (1 − 2M/r)L²/r²</code>
+                <p>Each pixel launches a photon backward from the camera.</p>
+              </article>
+              <article>
+                <span>Capture</span>
+                <strong>r ≤ 2M</strong>
+                <p>Rays crossing the event horizon become the shadow.</p>
+              </article>
+            </div>
+          </section>
+
+          <section
+            class="tab-panel"
+            id="project-panel"
+            role="tabpanel"
+            aria-labelledby="project-tab"
+            data-panel="project"
+            hidden
+          >
+            <div class="info-grid">
+              <article>
+                <span>Build</span>
+                <strong>No framework dependency</strong>
+                <p>Plain HTML, CSS, and JavaScript served by GitHub Pages.</p>
+              </article>
+              <article>
+                <span>Renderer</span>
+                <strong>WebGL with canvas fallback</strong>
+                <p>WebGL runs the geodesic shader; canvas keeps the page alive.</p>
+              </article>
+              <article>
+                <span>Next</span>
+                <strong>Kerr upgrade path</strong>
+                <p>Spin and frame dragging can come next without changing the UI.</p>
+              </article>
+            </div>
+          </section>
+        </div>
       </section>
     </main>
   </body>

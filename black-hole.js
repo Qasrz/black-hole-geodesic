@@ -1,15 +1,13 @@
-const vertexShaderSource = `#version 300 es
-in vec2 aPosition;
+const vertexShaderSource = `
+attribute vec2 aPosition;
 
 void main() {
   gl_Position = vec4(aPosition, 0.0, 1.0);
 }
 `;
 
-const fragmentShaderSource = `#version 300 es
+const fragmentShaderSource = `
 precision highp float;
-
-out vec4 fragColor;
 
 uniform vec2 uResolution;
 uniform float uTime;
@@ -229,7 +227,7 @@ void main() {
   color = pow(color, vec3(0.86));
   color *= 0.72 + 0.28 * vignette;
 
-  fragColor = vec4(color, 1.0);
+  gl_FragColor = vec4(color, 1.0);
 }
 `;
 
@@ -293,14 +291,39 @@ function updateStatus(state, message) {
   const dot = document.querySelector("#status-dot");
   const label = document.querySelector("#status-label");
 
+  if (!dot || !label) {
+    return;
+  }
+
   dot.className = `status-dot status-dot--${state}`;
   label.textContent = message;
 }
 
 function showFallback(message) {
-  const fallback = document.querySelector("#fallback-message");
-  fallback.hidden = false;
   updateStatus("fallback", message);
+}
+
+function bindTabs() {
+  const tabs = [...document.querySelectorAll("[data-tab]")];
+  const panels = [...document.querySelectorAll("[data-panel]")];
+
+  const activate = (target) => {
+    tabs.forEach((tab) => {
+      const isActive = tab.dataset.tab === target;
+      tab.classList.toggle("is-active", isActive);
+      tab.setAttribute("aria-selected", String(isActive));
+    });
+
+    panels.forEach((panel) => {
+      const isActive = panel.dataset.panel === target;
+      panel.classList.toggle("is-active", isActive);
+      panel.hidden = !isActive;
+    });
+  };
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => activate(tab.dataset.tab));
+  });
 }
 
 function bindControls() {
@@ -343,16 +366,146 @@ function bindControls() {
   });
 }
 
+function bootCanvasFallback(canvas) {
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) {
+    showFallback("Canvas unavailable");
+    return;
+  }
+
+  showFallback("Canvas fallback active");
+
+  const stars = Array.from({ length: 420 }, (_, index) => ({
+    x: Math.random(),
+    y: Math.random(),
+    radius: 0.35 + Math.random() * 1.25,
+    glow: 0.35 + Math.random() * 0.65,
+    drift: (index % 7) * 0.0007 + 0.0005,
+  }));
+
+  const resize = () => {
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.7);
+    const width = Math.floor(window.innerWidth * pixelRatio);
+    const height = Math.floor(window.innerHeight * pixelRatio);
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+      canvas.style.width = "100%";
+      canvas.style.height = "100%";
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    }
+  };
+
+  let lastTimestamp = null;
+  let simulationTime = 0;
+
+  const render = (timestamp) => {
+    if (lastTimestamp === null) {
+      lastTimestamp = timestamp;
+    }
+
+    const delta = Math.min(80, timestamp - lastTimestamp);
+    lastTimestamp = timestamp;
+
+    if (!settings.paused) {
+      simulationTime += (delta / 1000) * settings.timeScale;
+    }
+
+    resize();
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const cx = width * 0.52;
+    const cy = height * 0.5;
+    const scale = Math.min(width, height);
+    const horizon = scale * 0.12 * settings.mass;
+    const ring = horizon * 1.18;
+
+    const background = ctx.createRadialGradient(cx, cy, 0, cx, cy, scale * 0.9);
+    background.addColorStop(0, "#000005");
+    background.addColorStop(0.38, "#02040c");
+    background.addColorStop(0.72, "#101233");
+    background.addColorStop(1, "#03040a");
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, width, height);
+
+    for (const star of stars) {
+      const x = ((star.x + simulationTime * star.drift) % 1) * width;
+      const y = star.y * height;
+      ctx.globalAlpha = star.glow;
+      ctx.fillStyle = "#fff7de";
+      ctx.beginPath();
+      ctx.arc(x, y, star.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-0.22 + Math.sin(simulationTime * 0.16) * 0.08);
+    ctx.scale(1.55, 0.35 + settings.inclination / 220);
+
+    const diskGradient = ctx.createRadialGradient(0, 0, horizon * 0.8, 0, 0, scale * 0.42);
+    diskGradient.addColorStop(0.18, "rgba(255, 237, 180, 0)");
+    diskGradient.addColorStop(0.32, `rgba(255, 190, 86, ${0.34 * settings.diskBrightness})`);
+    diskGradient.addColorStop(0.48, `rgba(255, 94, 40, ${0.22 * settings.diskBrightness})`);
+    diskGradient.addColorStop(0.72, `rgba(86, 103, 255, ${0.2 * settings.diskBrightness})`);
+    diskGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = diskGradient;
+    ctx.beginPath();
+    ctx.arc(0, 0, scale * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    const lensGlow = ctx.createRadialGradient(cx, cy, ring * 0.75, cx, cy, ring * 1.38);
+    lensGlow.addColorStop(0, "rgba(0, 0, 0, 0)");
+    lensGlow.addColorStop(0.62, "rgba(255, 142, 50, 0.88)");
+    lensGlow.addColorStop(0.78, "rgba(255, 222, 142, 0.44)");
+    lensGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = lensGlow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ring * 1.45, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.arc(cx, cy, horizon, 0, Math.PI * 2);
+    ctx.fill();
+
+    const shadow = ctx.createRadialGradient(cx, cy, horizon, cx, cy, horizon * 4.5);
+    shadow.addColorStop(0, "rgba(0,0,0,1)");
+    shadow.addColorStop(0.38, "rgba(0,0,0,0.72)");
+    shadow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shadow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, horizon * 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    window.requestAnimationFrame(render);
+  };
+
+  window.addEventListener("resize", resize);
+  window.requestAnimationFrame(render);
+}
+
 function bootSimulation() {
   const canvas = document.querySelector("#black-hole-canvas");
-  const gl = canvas.getContext("webgl2", {
+  const gl =
+    canvas.getContext("webgl", {
+      alpha: false,
+      antialias: false,
+      powerPreference: "high-performance",
+    }) ||
+    canvas.getContext("experimental-webgl", {
     alpha: false,
     antialias: false,
     powerPreference: "high-performance",
-  });
+    });
 
   if (!gl) {
-    showFallback("WebGL2 unavailable");
+    bootCanvasFallback(canvas);
     return;
   }
 
@@ -362,7 +515,7 @@ function bootSimulation() {
     program = createProgram(gl);
   } catch (error) {
     console.error(error);
-    showFallback("Shader compile failed");
+    showFallback("Shader fallback active");
     return;
   }
 
@@ -441,6 +594,7 @@ function bootSimulation() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  bindTabs();
   bindControls();
   bootSimulation();
 });
