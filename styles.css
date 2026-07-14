@@ -1,14 +1,14 @@
 :root {
-  --foreground: #fff7eb;
-  --muted: #b6aec8;
+  --foreground: #f2f0ea;
+  --muted: #a9a5b7;
   --dim: rgba(255, 255, 255, 0.58);
-  --panel: rgba(7, 8, 18, 0.52);
-  --panel-strong: rgba(7, 8, 18, 0.72);
-  --border: rgba(255, 255, 255, 0.16);
-  --cyan: #6fe8ff;
-  --gold: #ffd166;
-  --orange: #ff8b2f;
-  --shadow: 0 22px 80px rgba(0, 0, 0, 0.46);
+  --panel: rgba(5, 6, 12, 0.42);
+  --panel-strong: rgba(5, 6, 12, 0.64);
+  --border: rgba(255, 255, 255, 0.11);
+  --cyan: #a8d9ff;
+  --gold: #e8c982;
+  --orange: #c98a4a;
+  --shadow: 0 22px 80px rgba(0, 0, 0, 0.38);
   --font-sans:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -74,9 +74,9 @@ button {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 50% 48%, transparent 0 23%, rgba(0, 0, 0, 0.08) 34%, rgba(0, 0, 0, 0.36) 100%),
-    linear-gradient(180deg, rgba(2, 3, 10, 0.78) 0%, transparent 18%, transparent 68%, rgba(2, 3, 10, 0.88) 100%),
-    linear-gradient(90deg, rgba(2, 3, 10, 0.86), transparent 26%, transparent 72%, rgba(2, 3, 10, 0.72));
+    radial-gradient(circle at 50% 48%, transparent 0 22%, rgba(0, 0, 0, 0.08) 40%, rgba(0, 0, 0, 0.46) 100%),
+    linear-gradient(180deg, rgba(2, 3, 10, 0.5) 0%, transparent 20%, transparent 72%, rgba(2, 3, 10, 0.7) 100%),
+    linear-gradient(90deg, rgba(2, 3, 10, 0.52), transparent 28%, transparent 74%, rgba(2, 3, 10, 0.48));
 }
 
 .top-hud {
@@ -158,28 +158,38 @@ button {
 .hero-mark {
   position: absolute;
   z-index: 3;
-  top: clamp(94px, 15vh, 160px);
+  top: clamp(80px, 11vh, 118px);
   left: clamp(18px, 5vw, 72px);
-  width: min(620px, calc(100vw - 36px));
+  display: inline-grid;
+  gap: 4px;
+  width: auto;
+  max-width: min(410px, calc(100vw - 36px));
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(4, 5, 11, 0.26);
+  color: var(--muted);
+  backdrop-filter: blur(14px);
   pointer-events: none;
 }
 
-.hero-mark p {
-  margin: 0 0 16px;
-  color: var(--cyan);
+.hero-mark span,
+.hero-mark strong {
   font-family: var(--font-mono);
-  font-size: 0.76rem;
-  letter-spacing: 0.16em;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
-.hero-mark h1 {
-  max-width: 12ch;
-  margin: 0;
-  font-size: clamp(3rem, 10vw, 8.5rem);
-  line-height: 0.84;
-  letter-spacing: -0.085em;
-  text-shadow: 0 18px 70px rgba(0, 0, 0, 0.72);
+.hero-mark span {
+  color: rgba(242, 240, 234, 0.62);
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+}
+
+.hero-mark strong {
+  color: var(--foreground);
+  font-size: 0.76rem;
+  letter-spacing: 0.11em;
 }
 
 .ui-toggle {
@@ -211,10 +221,10 @@ button {
 
 .ui-toggle:hover,
 .ui-toggle.is-open {
-  border-color: rgba(111, 232, 255, 0.45);
+  border-color: rgba(168, 217, 255, 0.36);
   background:
-    radial-gradient(circle at 18% 18%, rgba(111, 232, 255, 0.16), transparent 44%),
-    rgba(7, 8, 18, 0.58);
+    radial-gradient(circle at 18% 18%, rgba(168, 217, 255, 0.12), transparent 44%),
+    rgba(5, 6, 12, 0.55);
   opacity: 1;
   transform: translateY(-2px);
 }
@@ -224,7 +234,7 @@ button {
   height: 10px;
   border-radius: 50%;
   background: var(--cyan);
-  box-shadow: 0 0 18px var(--cyan);
+  box-shadow: 0 0 14px rgba(168, 217, 255, 0.74);
 }
 
 .tab-dock {
@@ -289,17 +299,17 @@ button {
 
 .tab-button:hover,
 .dock-button:hover {
-  border-color: rgba(111, 232, 255, 0.44);
-  background: rgba(111, 232, 255, 0.1);
+  border-color: rgba(168, 217, 255, 0.34);
+  background: rgba(168, 217, 255, 0.08);
   transform: translateY(-1px);
 }
 
 .tab-button.is-active {
   color: var(--foreground);
-  border-color: rgba(255, 209, 102, 0.4);
+  border-color: rgba(232, 201, 130, 0.32);
   background:
-    radial-gradient(circle at 20% 0%, rgba(255, 209, 102, 0.18), transparent 42%),
-    rgba(255, 255, 255, 0.09);
+    radial-gradient(circle at 20% 0%, rgba(232, 201, 130, 0.12), transparent 42%),
+    rgba(255, 255, 255, 0.07);
 }
 
 .tab-panels {
@@ -478,11 +488,8 @@ button {
   }
 
   .hero-mark {
-    top: 158px;
-  }
-
-  .hero-mark h1 {
-    font-size: clamp(3rem, 17vw, 5.3rem);
+    top: 150px;
+    left: 14px;
   }
 
   .tab-dock {

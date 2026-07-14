@@ -72,21 +72,21 @@ float starLayer(vec2 uv, float scale, float threshold, float radius) {
 
 vec3 backgroundSky(vec3 d) {
   vec2 uv = vec2(atan(d.x, d.z) / TAU + 0.5, asin(clamp(d.y, -1.0, 1.0)) / PI + 0.5);
-  float bandShape = abs(d.y * 1.85 + 0.18 * sin(5.0 * d.x + 2.2 * d.z));
-  float milkyBand = exp(-bandShape * bandShape * 8.0);
-  float nebula = noise3(d * 4.0 + vec3(0.0, 0.0, uTime * 0.015));
+  float bandShape = abs(d.y * 2.25 + 0.09 * sin(4.4 * d.x + 1.7 * d.z));
+  float galacticDust = exp(-bandShape * bandShape * 7.5);
+  float cloud = noise3(d * 3.2 + vec3(0.0, 0.0, uTime * 0.006));
 
-  vec3 base = mix(vec3(0.006, 0.012, 0.028), vec3(0.034, 0.021, 0.066), smoothstep(-0.5, 0.85, d.y));
-  vec3 dust = vec3(0.19, 0.09, 0.28) * milkyBand * (0.35 + 0.65 * nebula);
-  vec3 blueGas = vec3(0.05, 0.14, 0.24) * pow(milkyBand, 2.0);
+  vec3 base = mix(vec3(0.0018, 0.0026, 0.006), vec3(0.010, 0.012, 0.022), smoothstep(-0.55, 0.9, d.y));
+  vec3 dust = vec3(0.035, 0.030, 0.042) * galacticDust * (0.34 + 0.66 * cloud);
+  vec3 coldGas = vec3(0.010, 0.018, 0.030) * pow(galacticDust, 2.2);
 
   float stars = 0.0;
-  stars += starLayer(uv, 120.0, 0.965, 0.045);
-  stars += starLayer(uv + 0.37, 260.0, 0.986, 0.04) * 1.4;
-  stars += starLayer(uv + 0.61, 520.0, 0.994, 0.032) * 2.0;
+  stars += starLayer(uv, 130.0, 0.972, 0.036);
+  stars += starLayer(uv + 0.37, 285.0, 0.990, 0.03) * 1.15;
+  stars += starLayer(uv + 0.61, 570.0, 0.996, 0.024) * 1.55;
 
-  vec3 starColor = mix(vec3(0.75, 0.86, 1.0), vec3(1.0, 0.72, 0.48), hash21(floor(uv * 190.0)));
-  return base + dust + blueGas + starColor * stars * 2.1;
+  vec3 starColor = mix(vec3(0.72, 0.80, 0.94), vec3(1.0, 0.86, 0.64), hash21(floor(uv * 190.0)));
+  return base + dust + coldGas + starColor * stars * 1.35;
 }
 
 vec3 geodesicDerivative(vec3 state, float angularMomentum, float mass) {
@@ -111,30 +111,51 @@ vec3 positionFromPlane(float r, float phi, vec3 eRadial, vec3 eTangent) {
   return r * (cos(phi) * eRadial + sin(phi) * eTangent);
 }
 
+float thinDiskFlux(float radius, float isco) {
+  float x = max(radius / isco, 1.0001);
+  return max(0.0, pow(x, -3.0) * (1.0 - sqrt(1.0 / x)));
+}
+
+vec3 diskBlackbodyColor(float heat) {
+  vec3 dimRed = vec3(0.26, 0.075, 0.025);
+  vec3 amber = vec3(0.95, 0.54, 0.24);
+  vec3 warmWhite = vec3(1.0, 0.88, 0.66);
+  vec3 whiteHot = vec3(0.95, 0.96, 0.92);
+  vec3 color = mix(dimRed, amber, smoothstep(0.08, 0.44, heat));
+  color = mix(color, warmWhite, smoothstep(0.38, 0.78, heat));
+  color = mix(color, whiteHot, smoothstep(0.78, 1.0, heat));
+  return color;
+}
+
 vec3 diskEmission(vec3 hitPosition, vec3 rayStep, float mass) {
   float diskRadius = length(hitPosition.xz);
   float angle = atan(hitPosition.z, hitPosition.x);
-  float inner = 3.05 * mass;
-  float outer = 15.5 * mass;
-  float radialMask = smoothstep(inner, inner + 0.65 * mass, diskRadius) * (1.0 - smoothstep(outer - 1.2 * mass, outer, diskRadius));
+  float isco = 6.0 * mass;
+  float outer = 30.0 * mass;
+  float radialMask = smoothstep(isco, isco + 0.55 * mass, diskRadius) * (1.0 - smoothstep(outer - 4.0 * mass, outer, diskRadius));
 
   vec3 tangent = normalize(vec3(-hitPosition.z, 0.0, hitPosition.x));
   vec3 toObserver = normalize(-rayStep);
-  float orbitalSpeed = clamp(sqrt(mass / max(diskRadius, inner)), 0.0, 0.62);
-  float doppler = pow(max(0.24, 1.0 + 1.65 * dot(tangent, toObserver) * orbitalSpeed), 2.55);
-  float redshift = sqrt(max(0.03, 1.0 - 2.0 * mass / max(diskRadius, 2.05 * mass)));
+  float losVelocity = dot(tangent, toObserver);
 
-  float rings = 0.56 + 0.44 * sin(18.0 * log(diskRadius + 0.2) - 3.8 * angle - uTime * 1.7);
-  float turbulence = noise3(vec3(hitPosition.xz * 0.38, uTime * 0.22));
-  float hotness = smoothstep(outer, inner, diskRadius);
-  float brightness = radialMask * (0.22 + 0.78 * rings) * (0.65 + 0.55 * turbulence);
-  brightness *= pow(inner / max(diskRadius, inner), 0.9) * doppler * redshift;
+  float orbitalSpeed = clamp(sqrt(mass / max(diskRadius - 2.0 * mass, 0.45 * mass)), 0.0, 0.68);
+  float gamma = 1.0 / sqrt(max(0.08, 1.0 - orbitalSpeed * orbitalSpeed));
+  float doppler = 1.0 / max(0.16, gamma * (1.0 - orbitalSpeed * losVelocity));
+  float gravitational = sqrt(max(0.018, 1.0 - 2.0 * mass / max(diskRadius, 2.05 * mass)));
+  float observedShift = clamp(gravitational * doppler, 0.05, 2.4);
 
-  vec3 ember = vec3(1.0, 0.24, 0.055);
-  vec3 gold = vec3(1.0, 0.72, 0.22);
-  vec3 whiteHot = vec3(1.0, 0.92, 0.68);
-  vec3 color = mix(ember, gold, hotness);
-  color = mix(color, whiteHot, smoothstep(0.62, 1.0, hotness) * 0.65);
+  float flux = thinDiskFlux(diskRadius, isco);
+  float normalizedFlux = flux * 28.0;
+  float heat = clamp(pow(max(normalizedFlux, 0.0), 0.25) * observedShift, 0.0, 1.0);
+
+  float granular = noise3(vec3(hitPosition.xz * 0.22, uTime * 0.055));
+  float shear = 1.0 + 0.045 * sin(angle * 2.0 - log(max(diskRadius, 0.1)) * 7.5 + uTime * 0.42);
+  float turbulence = mix(0.92, 1.08, granular) * shear;
+  float beaming = pow(observedShift, 3.35);
+  float limbSoftening = mix(0.72, 1.0, smoothstep(0.05, 0.42, abs(toObserver.y)));
+  float brightness = radialMask * normalizedFlux * beaming * turbulence * limbSoftening;
+
+  vec3 color = diskBlackbodyColor(heat);
   return color * brightness * uDiskBrightness;
 }
 
@@ -186,9 +207,9 @@ void main() {
       float crossing = abs(previousPosition.y) / max(abs(previousPosition.y - nextPosition.y), 0.0001);
       vec3 hit = mix(previousPosition, nextPosition, clamp(crossing, 0.0, 1.0));
       float diskRadius = length(hit.xz);
-      if (diskRadius > 3.02 * mass && diskRadius < 15.8 * mass) {
+      if (diskRadius > 5.98 * mass && diskRadius < 30.4 * mass) {
         vec3 emission = diskEmission(hit, rayStep, mass);
-        float alpha = clamp(length(emission) * 0.21, 0.0, 0.78);
+        float alpha = clamp(length(emission) * 0.105, 0.0, 0.58);
         diskColor += emission * (1.0 - diskAlpha);
         diskAlpha += alpha * (1.0 - diskAlpha);
       }
@@ -213,23 +234,23 @@ void main() {
   float photonSphere = 3.0 * mass;
   float photonProximity = exp(-abs(minRadius - photonSphere) / (0.18 * mass));
   float orbitBoost = smoothstep(1.25, 5.4, maxPhi);
-  vec3 photonRing = vec3(1.0, 0.42, 0.12) * photonProximity * orbitBoost * 1.9;
+  vec3 photonRing = vec3(0.95, 0.64, 0.36) * photonProximity * orbitBoost * 0.78;
 
   if (captured) {
     float rim = photonProximity * smoothstep(0.8, 3.9, maxPhi);
-    color = vec3(0.0, 0.001, 0.004) + vec3(1.0, 0.34, 0.06) * rim * 0.65;
+    color = vec3(0.0, 0.0006, 0.002) + vec3(0.84, 0.45, 0.18) * rim * 0.26;
   } else {
-    color = mix(color, diskColor + color * 0.22, diskAlpha);
+    color = mix(color, diskColor + color * 0.12, diskAlpha);
     color += photonRing;
   }
 
-  float chroma = 0.02 * photonProximity * orbitBoost;
+  float chroma = 0.006 * photonProximity * orbitBoost;
   color.r += chroma;
-  color.b += chroma * 0.35;
+  color.b += chroma * 0.22;
   color *= uExposure;
   color = vec3(1.0) - exp(-color);
-  color = pow(color, vec3(0.86));
-  color *= 0.72 + 0.28 * vignette;
+  color = pow(color, vec3(0.92));
+  color *= 0.66 + 0.34 * vignette;
 
   gl_FragColor = vec4(color, 1.0);
 }
@@ -238,12 +259,12 @@ void main() {
 const initialSettings = {
   mass: 1,
   inclination: 38,
-  cameraRadius: 24,
-  exposure: 1.05,
+  cameraRadius: 28,
+  exposure: 0.92,
   fov: 1.08,
   steps: 360,
-  diskBrightness: 1,
-  timeScale: 0.75,
+  diskBrightness: 0.86,
+  timeScale: 0.52,
   yaw: 0,
   panX: 0,
   panY: 0,
@@ -586,10 +607,10 @@ function bootCanvasFallback(canvas) {
     const ring = horizon * 1.18;
 
     const background = ctx.createRadialGradient(cx, cy, 0, cx, cy, scale * 0.9);
-    background.addColorStop(0, "#000005");
-    background.addColorStop(0.38, "#02040c");
-    background.addColorStop(0.72, "#101233");
-    background.addColorStop(1, "#03040a");
+    background.addColorStop(0, "#000003");
+    background.addColorStop(0.38, "#01030a");
+    background.addColorStop(0.72, "#060814");
+    background.addColorStop(1, "#020308");
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, width, height);
 
@@ -609,11 +630,11 @@ function bootCanvasFallback(canvas) {
     ctx.rotate(settings.yaw - 0.22 + Math.sin(simulationTime * 0.16) * 0.08);
     ctx.scale(1.55, 0.35 + settings.inclination / 220);
 
-    const diskGradient = ctx.createRadialGradient(0, 0, horizon * 0.8, 0, 0, scale * 0.42);
+    const diskGradient = ctx.createRadialGradient(0, 0, horizon * 1.55, 0, 0, scale * 0.48);
     diskGradient.addColorStop(0.18, "rgba(255, 237, 180, 0)");
-    diskGradient.addColorStop(0.32, `rgba(255, 190, 86, ${0.34 * settings.diskBrightness})`);
-    diskGradient.addColorStop(0.48, `rgba(255, 94, 40, ${0.22 * settings.diskBrightness})`);
-    diskGradient.addColorStop(0.72, `rgba(86, 103, 255, ${0.2 * settings.diskBrightness})`);
+    diskGradient.addColorStop(0.3, `rgba(248, 221, 170, ${0.24 * settings.diskBrightness})`);
+    diskGradient.addColorStop(0.5, `rgba(178, 104, 48, ${0.15 * settings.diskBrightness})`);
+    diskGradient.addColorStop(0.76, `rgba(80, 88, 116, ${0.08 * settings.diskBrightness})`);
     diskGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = diskGradient;
     ctx.beginPath();
@@ -623,8 +644,8 @@ function bootCanvasFallback(canvas) {
 
     const lensGlow = ctx.createRadialGradient(cx, cy, ring * 0.75, cx, cy, ring * 1.38);
     lensGlow.addColorStop(0, "rgba(0, 0, 0, 0)");
-    lensGlow.addColorStop(0.62, "rgba(255, 142, 50, 0.88)");
-    lensGlow.addColorStop(0.78, "rgba(255, 222, 142, 0.44)");
+    lensGlow.addColorStop(0.62, "rgba(214, 139, 66, 0.48)");
+    lensGlow.addColorStop(0.78, "rgba(245, 218, 164, 0.24)");
     lensGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = lensGlow;
     ctx.beginPath();

@@ -37,9 +37,9 @@
         </div>
       </header>
 
-      <section class="hero-mark" aria-label="Project introduction">
-        <p>General relativity portfolio experiment</p>
-        <h1>Light bent by spacetime.</h1>
+      <section class="hero-mark" aria-label="Project summary">
+        <span>Schwarzschild null geodesics</span>
+        <strong>thin-disk lensing model</strong>
       </section>
 
       <button
@@ -142,7 +142,7 @@
 
               <label class="control">
                 <span>
-                  Distance <strong id="cameraRadius-value">24.0 r</strong>
+                  Distance <strong id="cameraRadius-value">28.0 r</strong>
                 </span>
                 <input
                   data-control="cameraRadius"
@@ -153,7 +153,7 @@
                   min="8.5"
                   max="54"
                   step="0.5"
-                  value="24"
+                  value="28"
                 />
               </label>
 
@@ -172,7 +172,7 @@
               </label>
 
               <label class="control">
-                <span>Exposure <strong id="exposure-value">1.05</strong></span>
+                <span>Exposure <strong id="exposure-value">0.92</strong></span>
                 <input
                   data-control="exposure"
                   data-value="exposure-value"
@@ -181,23 +181,23 @@
                   min="0.55"
                   max="1.85"
                   step="0.01"
-                  value="1.05"
+                  value="0.92"
                 />
               </label>
 
               <label class="control">
                 <span>
-                  Disk <strong id="diskBrightness-value">1.00</strong>
+                  Accretion <strong id="diskBrightness-value">0.86</strong>
                 </span>
                 <input
                   data-control="diskBrightness"
                   data-value="diskBrightness-value"
                   data-precision="2"
                   type="range"
-                  min="0.2"
-                  max="1.75"
+                  min="0.15"
+                  max="1.45"
                   step="0.01"
-                  value="1"
+                  value="0.86"
                 />
               </label>
 
@@ -216,7 +216,7 @@
               </label>
 
               <label class="control">
-                <span>Speed <strong id="timeScale-value">0.75</strong></span>
+                <span>Speed <strong id="timeScale-value">0.52</strong></span>
                 <input
                   data-control="timeScale"
                   data-value="timeScale-value"
@@ -225,7 +225,7 @@
                   min="0"
                   max="1.6"
                   step="0.01"
-                  value="0.75"
+                  value="0.52"
                 />
               </label>
             </div>
@@ -263,6 +263,14 @@
                 <span>Capture</span>
                 <strong>r ≤ 2M</strong>
                 <p>Rays crossing the event horizon become the shadow.</p>
+              </article>
+              <article>
+                <span>Accretion disk</span>
+                <strong>Thin disk, ISCO at 6M</strong>
+                <p>
+                  Flux follows a Novikov-Thorne-style radial profile with
+                  Doppler and gravitational redshift.
+                </p>
               </article>
             </div>
           </section>
